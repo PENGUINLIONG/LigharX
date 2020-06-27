@@ -744,7 +744,7 @@ void snapshot_framebuf(Framebuffer& framebuf, const char* path) {
     0x000000FF, // Blue channel mask.
     0xFF000000, // Alpha channel mask.
     0x57696E20, // Color space. ("Win ")
-    0,0,0,0,0,0, // CIEXYZTRIPLE end point.
+    0,0,0,0,0,0,0,0,0, // CIEXYZTRIPLE end point.
     0, // Red gamma.
     0, // Green gamma.
     0, // Blue gamma.

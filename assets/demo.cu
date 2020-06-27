@@ -15,14 +15,14 @@ extern "C" __global__ void __anyhit__() {
 
 extern "C" __global__ void __miss__() {
   auto pColor = (uint32_t*)WORDS2PTR(optixGetPayload_0(), optixGetPayload_1());
-  *pColor = 0;
+  *pColor = 0xFF000000;
 }
 
 extern "C" __global__ void __raygen__() {
   auto x = optixGetLaunchIndex().x;
   auto y = optixGetLaunchIndex().y;
-  auto u = ((x + 0.5 - ((float)cfg.width / 2)) / cfg.width * 2.0);
-  auto v = ((y + 0.5 - ((float)cfg.height / 2)) / cfg.height * 2.0);
+  auto u = ((float)(x * 2 + 1) / cfg.width - 1);
+  auto v = ((float)(y * 2 + 1) / cfg.height - 1);
   auto i = x + y * cfg.width;
   uint32_t color = 0;
   uint32_t wColor[] = PTR2WORDS(&color);
