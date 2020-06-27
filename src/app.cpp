@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -196,14 +197,13 @@ struct DeviceMemory {
   operator DeviceMemorySlice() {
     return DeviceMemorySlice { ptr, size };
   }
-  DeviceMemorySlice slice(size_t offset, size_t size, size_t align = 1) {
-    offset = align_addr(ptr + offset, align) - ptr;
+  inline DeviceMemorySlice slice(size_t offset, size_t size) const {
     ASSERT << ((offset >= 0) && (offset + size <= this->size))
       << "slice out of range";
     return DeviceMemorySlice { ptr + offset, size };
   }
-  DeviceMemorySlice slice(size_t offset, size_t align = 1) {
-    return slice(offset, size, align);
+  inline DeviceMemorySlice slice(size_t offset) const {
+    return slice(offset, size - offset);
   }
 };
 
@@ -228,7 +228,7 @@ void free_mem(DeviceMemory& devmem) {
   devmem = {};
 }
 
-// transfer data between two slices of CUDA device memory. `dst` MUST be able to
+// Transfer data between two slices of CUDA device memory. `dst` MUST be able to
 // contain an entire copy of content of `src`; `src` and `dst` MUST NOT overlap
 // in range.
 void transfer_mem(DeviceMemorySlice src, DeviceMemorySlice dst) {
@@ -239,31 +239,45 @@ void transfer_mem(DeviceMemorySlice src, DeviceMemorySlice dst) {
     << "transfer range overlapped";
   CUDA_ASSERT << cuMemcpy(dst.ptr, src.ptr, src.size);
 }
-// upload data to CUDA device memory. `dst` MUST be able to contain an entire
+// Upload data to CUDA device memory. `dst` MUST be able to contain an entire
 // copy of content of `src`.
 void upload_mem(const void* src, DeviceMemorySlice dst, size_t size) {
   ASSERT << (size <= dst.size)
     << "memory read out of range";
   CUDA_ASSERT << cuMemcpyHtoD(dst.ptr, src, size);
 }
-// upload structured data to CUDA device memory.`dst` MUST be able to contain an
+// Upload structured data to CUDA device memory.`dst` MUST be able to contain an
 // entire copy of content of `src`.
 template<typename T,
   typename _ = std::enable_if<std::is_trivially_copyable_v<T>>>
-void upload_mem(const std::vector<T>& src, DeviceMemorySlice dst) {
+  void upload_mem(const std::vector<T>& src, DeviceMemorySlice dst) {
   upload_mem(src.data(), dst, sizeof(T) * src.size());
 }
-// download data from CUDA device memory. If the `size` of `dst` is shoter than
-// the `src`, a truncated copy of `src` is download_memed.
+// Upload structured data to CUDA device memory.`dst` MUST be able to contain an
+// entire copy of content of `src`.
+template<typename T,
+  typename _ = std::enable_if<std::is_trivially_copyable_v<T>>>
+  void upload_mem(const T& src, DeviceMemorySlice dst) {
+  upload_mem(&src, dst, sizeof(T));
+}
+// Download data from CUDA device memory. If the `size` of `dst` is shoter than
+// the `src`, a truncated copy of `src` is downloaded.
 void download_mem(DeviceMemorySlice src, void* dst, size_t size) {
   CUDA_ASSERT << cuMemcpyDtoH(dst, src.ptr, size);
 }
-// download structured data from CUDA device memory. If the capacity of `dst` is
-// smaller than the `src`, a truncated copy of `src` is download_memed.
+// Download structured data from CUDA device memory. If the size of `dst` is
+// smaller than the `src`, a truncated copy of `src` is downloaded.
 template<typename T,
   typename _ = std::enable_if<std::is_trivially_copyable_v<T>>>
 void download_mem(DeviceMemorySlice src, std::vector<T>& dst) {
   download_mem(src, (void*)dst.data(), sizeof(T) * dst.size());
+}
+// Download data from CUDA device memory. If the size of `dst` if smaller than
+// the `src`, a truncated copy of `src` is downloaded.
+template<typename T,
+  typename _ = std::enable_if<std::is_trivially_copyable_v<T>>>
+void download_mem(DeviceMemorySlice src, T& dst) {
+  download_mem(src, &dst, sizeof(T));
 }
 
 // Copy a slice of host memory to a new memory allocation on a device. The
@@ -670,22 +684,6 @@ void destroy_pipe(Pipeline& pipe) {
   pipe = Pipeline {};
   liong::log::info("destroyed pipeline");
 }
-/*
-OptixTraversableHandle build_accel(
-  OptixDeviceContext dc,
-  const std::vector<OptixBuildInput>& build_ins
-) {
-  OptixAccelBuildOptions opts {
-    OPTIX_BUILD_FLAG_PREFER_FAST_TRACE,
-    OPTIX_BUILD_OPERATION_BUILD,
-    OptixMotionOptions { 0, OPTIX_MOTION_FLAG_NONE, 0.0, 0.0 }
-  };
-  OptixAccelBufferSizes buf_size;
-  OPTIX_ASSERT << optixAccelComputeMemoryUsage(dc, &opts, build_ins.data(),
-    build_ins.size(), &buf_size);
-  optixAccelBuild(dc, );
-}
-*/
 
 struct Transaction {
   CUstream stream;
@@ -760,17 +758,180 @@ void snapshot_framebuf(Framebuffer& framebuf, const char* path) {
   f.close();
 }
 
+struct MeshConfig {
+  // Vertex data buffer.
+  const void* vert_buf;
+  // Format of vertex data.
+  OptixVertexFormat vert_fmt;
+  // Number of vertices in the buffer.
+  size_t nvert;
+  // Stride between packs of vertex data.
+  size_t vert_stride;
+
+  // Index data buffer.
+  const void* idx_buf;
+  // Format of index tuple.
+  OptixIndicesFormat idx_fmt;
+  // Number of triangles in `idx_buf`.
+  size_t ntri;
+  // Stride between tuples of triangle vertex indices.
+  size_t tri_stride;
+};
+struct Mesh {
+  DeviceMemory devmem;
+  DeviceMemorySlice vert_slice;
+  DeviceMemorySlice idx_slice;
+  OptixBuildInput build_in;
+};
+Mesh create_mesh(const MeshConfig& mesh_cfg) {
+  auto vert_buf_size = mesh_cfg.nvert * mesh_cfg.vert_stride;
+  auto idx_buf_size = mesh_cfg.ntri * mesh_cfg.tri_stride;
+
+  ASSERT << (vert_buf_size != 0)
+    << "vertex buffer size cannot be zero";
+  ASSERT << (idx_buf_size != 0)
+    << "triangle index buffer size cannot be zero";
+
+  auto devmem = alloc_mem(vert_buf_size + idx_buf_size);
+  auto vert_slice = devmem.slice(0, vert_buf_size);
+  auto idx_slice = devmem.slice(vert_buf_size, idx_buf_size);
+  upload_mem(mesh_cfg.vert_buf, vert_slice, vert_buf_size);
+  upload_mem(mesh_cfg.idx_buf, idx_slice, idx_buf_size);
+
+  OptixBuildInput build_in {};
+  build_in.type = OPTIX_BUILD_INPUT_TYPE_TRIANGLES;
+  build_in.triangleArray.vertexBuffers = new CUdeviceptr { vert_slice.ptr };
+  build_in.triangleArray.vertexFormat = mesh_cfg.vert_fmt;
+  build_in.triangleArray.numVertices = mesh_cfg.nvert;
+  build_in.triangleArray.vertexStrideInBytes = mesh_cfg.vert_stride;
+  build_in.triangleArray.indexBuffer = idx_slice.ptr;
+  build_in.triangleArray.indexFormat = mesh_cfg.idx_fmt;
+  build_in.triangleArray.numIndexTriplets = mesh_cfg.ntri;
+  build_in.triangleArray.indexStrideInBytes = mesh_cfg.tri_stride;
+  // TODO: (penguinliong) Pre-transform has been ignored for now.
+  build_in.triangleArray.flags = new uint32_t[1] {};
+  build_in.triangleArray.numSbtRecords = 1;
+
+  return Mesh { devmem, vert_slice, idx_slice, build_in };
+}
+void destroy_mesh(Mesh& mesh) {
+  delete[] mesh.build_in.triangleArray.flags;
+  delete mesh.build_in.triangleArray.vertexBuffers;
+  free_mem(mesh.devmem);
+  mesh = {};
+}
+
+struct SceneObject {
+  bool dirty;
+  OptixTraversableHandle trav;
+  OptixAabb aabb;
+  // Vertex and index buffer. Vertex data is placed at first and index follows
+  // that.
+  DeviceMemory devmem;
+};
+SceneObject create_sobj(
+  const Context& ctxt,
+  const Mesh& mesh
+) {
+  const static OptixAccelBuildOptions build_opts = {
+    // TODO: (penguinliong) Update, compaction, build/trace speed preference.
+    OPTIX_BUILD_FLAG_ALLOW_COMPACTION,
+    OPTIX_BUILD_OPERATION_BUILD,
+    // Motion not supported.
+    OptixMotionOptions { 0, OPTIX_MOTION_FLAG_NONE, 0.0, 0.0 },
+  };
+
+  CUstream stream {};
+  // TODO: (penguinliong) To command buffer.
+  CUDA_ASSERT << cuStreamCreate(&stream, 0);
+
+  OptixTraversableHandle blas;
+  struct {
+    OptixAabb aabb;
+    size_t compact_size;
+  } build_prop;
+
+  OptixAccelBufferSizes buf_size;
+  OPTIX_ASSERT << optixAccelComputeMemoryUsage(ctxt.optix_dc, &build_opts,
+    &mesh.build_in, 1, &buf_size);
+  auto out_devmem = alloc_mem(buf_size.outputSizeInBytes,
+    OPTIX_ACCEL_BUFFER_BYTE_ALIGNMENT);
+  auto temp_devmem = alloc_mem(buf_size.tempSizeInBytes + sizeof(build_prop),
+    OPTIX_ACCEL_BUFFER_BYTE_ALIGNMENT);
+  size_t build_feedback_devmem_base =
+    temp_devmem.ptr + buf_size.tempSizeInBytes;
+  std::array<OptixAccelEmitDesc, 2> blas_desc = {
+    OptixAccelEmitDesc {
+      build_feedback_devmem_base,
+      OPTIX_PROPERTY_TYPE_AABBS,
+    },
+    OptixAccelEmitDesc {
+      build_feedback_devmem_base + sizeof(OptixAabb),
+      OPTIX_PROPERTY_TYPE_COMPACTED_SIZE,
+    }
+  };
+  OPTIX_ASSERT << optixAccelBuild(ctxt.optix_dc, stream, &build_opts,
+    &mesh.build_in, 1, temp_devmem.ptr, buf_size.tempSizeInBytes,
+    out_devmem.ptr, buf_size.outputSizeInBytes, &blas, blas_desc.data(),
+    blas_desc.size());
+
+  // TODO: (penguinliong) To command buffer.
+  CUDA_ASSERT << cuStreamSynchronize(stream);
+
+  download_mem(temp_devmem.slice(buf_size.tempSizeInBytes), build_prop);
+  free_mem(temp_devmem);
+
+  auto compact_devmem = alloc_mem(build_prop.compact_size,
+    OPTIX_ACCEL_BUFFER_BYTE_ALIGNMENT);
+  OPTIX_ASSERT << optixAccelCompact(ctxt.optix_dc, stream, blas,
+    compact_devmem.ptr, compact_devmem.size, &blas);
+  free_mem(out_devmem);
+
+  // TODO: (penguinliong) To command buffer.
+  CUDA_ASSERT << cuStreamDestroy(stream);
+
+  return SceneObject { false, blas, build_prop.aabb, compact_devmem };
+}
+void destroy_sobj(SceneObject sobj) {
+  free_mem(sobj.devmem);
+  sobj = {};
+}
+/*
+struct Scene {
+  OptixTraversableHandle trav;
+  std::vector<SceneObject> sobjs;
+  DeviceMemory devmem;
+};
+struct DisassembledScene {
+
+};
+Scene create_scene(std::vector<SceneObject> sobjs) {
+  
+}
+DisassembledScene disasm_scene(std::vector<>)
+void destroy_scene(Scene& scene) {
+
+}
+*/
 
 // Create a CUDA stream and launch the stream for OptiX scene traversal
 // controlled by the given pipeline.
 //
 // WARNING: `pipe` must be kept alive through out the lifetime of the created
 // transaction.
-Transaction init_transact(Pipeline pipe, const Framebuffer& framebuf) {
+template<typename TTrav,
+  typename _ = std::enable_if_t<std::is_same_v<decltype(TTrav::trav),
+    OptixTraversableHandle>>>
+Transaction init_transact(
+  Pipeline pipe,
+  const Framebuffer& framebuf,
+  const TTrav& sobj
+) {
   auto lparam = LaunchConfig {
     framebuf.width,
     framebuf.height,
     framebuf.depth,
+    sobj.trav,
     reinterpret_cast<uint32_t*>(framebuf.framebuf_devmem.ptr)
   };
   DeviceMemory lparam_devmem = shadow_mem(lparam);
@@ -810,7 +971,6 @@ void final_transact(Transaction& trans) {
 
 
 
-
 PipelineConfig l_create_pipe_cfg() {
   // Note: For Visual Studio 2019 the default working directory is
   // `${CMAKE_BINARY_DIR}/bin`
@@ -838,6 +998,31 @@ PipelineConfig l_create_pipe_cfg() {
   return pipe_cfg;
 }
 
+MeshConfig l_create_mesh_cfg() {
+  const static float vert_buf[] = {
+    -0.5, 0.5, 0.0,
+    0.5, 0.5, 0.0,
+    -0.5, -0.5, 0.0,
+    0.5, -0.5, 0.0
+  };
+  const static uint16_t idx_buf[] = {
+    2, 3, 1,
+    2, 1, 0
+  };
+
+  auto mesh_cfg = MeshConfig {};
+  mesh_cfg.vert_buf = vert_buf;
+  mesh_cfg.vert_fmt = OPTIX_VERTEX_FORMAT_FLOAT3;
+  mesh_cfg.nvert = 4;
+  mesh_cfg.vert_stride = 3 * sizeof(float);
+  mesh_cfg.idx_buf = idx_buf;
+  mesh_cfg.idx_fmt = OPTIX_INDICES_FORMAT_UNSIGNED_SHORT3;
+  mesh_cfg.ntri = 2;
+  mesh_cfg.tri_stride = 3 * sizeof(uint16_t);
+
+  return mesh_cfg;
+}
+
 int main() {
   liong::log::set_log_callback(log_cb);
 
@@ -849,25 +1034,22 @@ int main() {
 
 
   auto pipe_cfg = l_create_pipe_cfg();
+  auto mesh_cfg = l_create_mesh_cfg();
 
   Context ctxt;
   Pipeline pipe;
   Framebuffer framebuf;
+  Mesh mesh;
+  SceneObject sobj;
   Transaction transact;
 
   try {
     ctxt = create_ctxt();
-
-    std::vector<int32_t> a;
-    for (auto i = 0; i < 1024; ++i) {
-      a.push_back(i);
-    }
-    std::vector<int32_t> b(1024, 0);
-    std::vector<int32_t> c(1024, 0);
-
     pipe = create_pipe(ctxt, pipe_cfg);
     framebuf = create_framebuf(32, 32);
-    transact = init_transact(pipe, framebuf);
+    mesh = create_mesh(mesh_cfg);
+    sobj = create_sobj(ctxt, mesh);
+    transact = init_transact(pipe, framebuf, sobj);
 
     wait_transact(transact);
 
@@ -881,6 +1063,8 @@ int main() {
     liong::log::error("application threw an illiterate exception");
   }
   final_transact(transact);
+  destroy_sobj(sobj);
+  destroy_mesh(mesh);
   destroy_framebuf(framebuf);
   destroy_pipe(pipe);
   destroy_ctxt(ctxt);
