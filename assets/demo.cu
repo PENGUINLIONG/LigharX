@@ -1,5 +1,4 @@
-#include <optix_device.h>
-#include "app.hpp"
+#include "x.hpp"
 
 namespace liong {
 

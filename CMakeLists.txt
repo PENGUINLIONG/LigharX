@@ -21,8 +21,8 @@ include_directories(
     ${OptiX_INCLUDE}
     ${CUDA_TOOLKIT_INCLUDE}
 )
-file(GLOB SRCS "${PROJECT_SOURCE_DIR}/src/*.cpp")
-add_executable(OptixLab ${SRCS})
+file(GLOB SRCS "${PROJECT_SOURCE_DIR}/src/*")
+add_executable(OptixLab ${SRCS}  "include/ty.hpp")
 
 # Compile OptixLabShaders.
 file(GLOB SHADER_SRCS "${PROJECT_SOURCE_DIR}/assets/*.cu")
@@ -35,7 +35,7 @@ foreach(SHADER_SRC IN ITEMS ${SHADER_SRCS})
     add_custom_command(
         OUTPUT ${SHADER_DST}
         DEPENDS ${SHADER_SRC}
-        COMMAND ${NVCC} -ptx --use_fast_math --generate-line-info -I"${CUDA_TOOLKIT_ROOT_DIR}/include" -I"${OptiX_INCLUDE}" -I"${PROJECT_SOURCE_DIR}/include" -o ${SHADER_DST} ${SHADER_SRC}
+        COMMAND ${NVCC} -ptx --use_fast_math --expt-relaxed-constexpr --generate-line-info -I"${CUDA_TOOLKIT_ROOT_DIR}/include" -I"${OptiX_INCLUDE}" -I"${PROJECT_SOURCE_DIR}/include" -o ${SHADER_DST} ${SHADER_SRC}
         COMMENT "compiling shader: ${SHADER_SRC}"
         VERBATIM
     )

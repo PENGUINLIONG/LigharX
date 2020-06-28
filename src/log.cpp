@@ -1,4 +1,4 @@
-#include "common.hpp"
+#include "log.hpp"
 
 namespace liong {
 

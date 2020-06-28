@@ -1,5 +1,6 @@
 #pragma once
-// Common utilities.
+// Logging infrastructure.
+// @PENGUINLIONG
 #include <cstdint>
 #include <string>
 #include <sstream>
@@ -12,9 +13,9 @@ namespace log {
 // Logging infrastructure.
 
 enum class LogLevel {
-  INFO,
-  WARNING,
-  ERROR,
+  L_LOG_LEVEL_INFO,
+  L_LOG_LEVEL_WARNING,
+  L_LOG_LEVEL_ERROR,
 };
 
 namespace detail {
@@ -48,15 +49,15 @@ void log(LogLevel level, const TArgs& ... msg) {
 
 template<typename ... TArgs>
 inline void info(const TArgs& ... msg) {
-  log(LogLevel::INFO, msg...);
+  log(LogLevel::L_LOG_LEVEL_INFO, msg...);
 }
 template<typename ... TArgs>
 inline void warn(const TArgs& ... msg) {
-  log(LogLevel::WARNING, msg...);
+  log(LogLevel::L_LOG_LEVEL_WARNING, msg...);
 }
 template<typename ... TArgs>
 inline void error(const TArgs& ... msg) {
-  log(LogLevel::ERROR, msg...);
+  log(LogLevel::L_LOG_LEVEL_ERROR, msg...);
 }
 }
 
