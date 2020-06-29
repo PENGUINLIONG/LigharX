@@ -168,9 +168,14 @@ int main() {
     pipe = create_pipe(ctxt, pipe_cfg);
     framebuf = create_framebuf(32, 32);
     mesh = create_mesh(mesh_cfg);
-    sobj = create_sobj(ctxt, mesh);
-    transact = init_transact(pipe, framebuf, sobj);
+    sobj = create_sobj(ctxt);
+    transact = create_transact();
 
+    cmd_build_sobj(transact, ctxt, mesh, sobj);
+    wait_transact(transact);
+    cmd_compact_as(transact, ctxt, sobj);
+    wait_transact(transact);
+    cmd_traverse(transact, pipe, framebuf, sobj);
     wait_transact(transact);
 
     snapshot_framebuf(framebuf, "./snapshot.bmp");
@@ -182,7 +187,7 @@ int main() {
   } catch (...) {
     liong::log::error("application threw an illiterate exception");
   }
-  final_transact(transact);
+  destroy_transact(transact);
   destroy_sobj(sobj);
   destroy_mesh(mesh);
   destroy_framebuf(framebuf);

@@ -530,67 +530,12 @@ void destroy_mesh(Mesh& mesh) {
 }
 
 
-const static OptixAccelBuildOptions BUILD_OPT = {
-  // TODO: (penguinliong) Update, compaction, build/trace speed preference.
-  OPTIX_BUILD_FLAG_ALLOW_COMPACTION,
-  OPTIX_BUILD_OPERATION_BUILD,
-  // Motion not supported.
-  OptixMotionOptions { 0, OPTIX_MOTION_FLAG_NONE, 0.0, 0.0 },
-};
-SceneObject create_sobj(const Context& ctxt, const Mesh& mesh) {
-  CUstream stream {};
-  // TODO: (penguinliong) To command buffer.
-  CUDA_ASSERT << cuStreamCreate(&stream, 0);
-
-  OptixTraversableHandle blas;
-  struct {
-    OptixAabb aabb;
-    size_t compact_size;
-  } build_prop;
-
-  OptixAccelBufferSizes buf_size;
-  OPTIX_ASSERT << optixAccelComputeMemoryUsage(ctxt.optix_dc, &BUILD_OPT,
-    &mesh.build_in, 1, &buf_size);
-  auto out_devmem = alloc_mem(buf_size.outputSizeInBytes,
-    OPTIX_ACCEL_BUFFER_BYTE_ALIGNMENT);
-  auto temp_devmem = alloc_mem(buf_size.tempSizeInBytes + sizeof(build_prop),
-    OPTIX_ACCEL_BUFFER_BYTE_ALIGNMENT);
-  size_t build_feedback_devmem_base =
-    temp_devmem.ptr + buf_size.tempSizeInBytes;
-  std::array<OptixAccelEmitDesc, 2> blas_desc = {
-    OptixAccelEmitDesc {
-      build_feedback_devmem_base,
-      OPTIX_PROPERTY_TYPE_AABBS,
-    },
-    OptixAccelEmitDesc {
-      build_feedback_devmem_base + sizeof(OptixAabb),
-      OPTIX_PROPERTY_TYPE_COMPACTED_SIZE,
-    }
-  };
-  OPTIX_ASSERT << optixAccelBuild(ctxt.optix_dc, stream, &BUILD_OPT,
-    &mesh.build_in, 1, temp_devmem.ptr, buf_size.tempSizeInBytes,
-    out_devmem.ptr, buf_size.outputSizeInBytes, &blas, blas_desc.data(),
-    blas_desc.size());
-
-  // TODO: (penguinliong) To command buffer.
-  CUDA_ASSERT << cuStreamSynchronize(stream);
-
-  download_mem(temp_devmem.slice(buf_size.tempSizeInBytes), build_prop);
-  free_mem(temp_devmem);
-
-  auto compact_devmem = alloc_mem(build_prop.compact_size,
-    OPTIX_ACCEL_BUFFER_BYTE_ALIGNMENT);
-  OPTIX_ASSERT << optixAccelCompact(ctxt.optix_dc, stream, blas,
-    compact_devmem.ptr, compact_devmem.size, &blas);
-  free_mem(out_devmem);
-
-  // TODO: (penguinliong) To command buffer.
-  CUDA_ASSERT << cuStreamDestroy(stream);
-
-  return SceneObject { false, blas, build_prop.aabb, compact_devmem };
+SceneObject create_sobj(const Context& ctxt) {
+  return SceneObject { new SceneObjectInner {} };
 }
 void destroy_sobj(SceneObject& sobj) {
-  free_mem(sobj.devmem);
+  free_mem(sobj.inner->devmem);
+  delete sobj.inner;
   sobj = {};
 }
 /*
@@ -611,6 +556,71 @@ void destroy_scene(Scene& scene) {
 
 }
 */
+
+
+
+Transaction create_transact() {
+  CUstream stream;
+  CUDA_ASSERT << cuStreamCreate(&stream, CU_STREAM_DEFAULT);
+  return Transaction { stream };
+}
+bool pool_transact(const Transaction& transact) {
+  auto res = cuStreamQuery(transact.stream);
+  if (res == CUDA_SUCCESS) {
+    return true;
+  } else if (res == CUDA_ERROR_NOT_READY) {
+    return false;
+  }
+  CUDA_ASSERT << res;
+}
+void wait_transact(const Transaction& transact) {
+  CUDA_ASSERT << cuStreamSynchronize(transact.stream);
+}
+void destroy_transact(Transaction& transact) {
+  cuStreamDestroy(transact.stream);
+  for (auto devmem : transact.mnged_devmem) {
+    free_mem(devmem);
+  }
+  transact = {};
+  liong::log::info("finalized transaction");
+}
+
+
+
+void manage_mem(Transaction& transact, DeviceMemory&& devmem) {
+  transact.mnged_devmem.emplace_back(std::forward<DeviceMemory>(devmem));
+}
+void cmd_transfer_mem(
+  Transaction& transact,
+  const DeviceMemorySlice& src,
+  const DeviceMemorySlice& dst
+) {
+  ASSERT << (src.size <= dst.size)
+    << "transfer out of range";
+  ASSERT << (((src.ptr < dst.ptr) && (src.ptr + src.size <= dst.ptr)) ||
+    ((src.ptr > dst.ptr) && (src.ptr >= dst.ptr + dst.size)))
+    << "transfer range overlapped";
+  CUDA_ASSERT << cuMemcpyAsync(dst.ptr, src.ptr, src.size, transact.stream);
+}
+void cmd_upload_mem(
+  Transaction& transact,
+  const void* src,
+  const DeviceMemorySlice& dst,
+  size_t size
+) {
+  ASSERT << (size <= dst.size)
+    << "memory read out of range";
+  CUDA_ASSERT << cuMemcpyHtoDAsync(dst.ptr, src, size, transact.stream);
+}
+void cmd_download_mem(
+  Transaction& transact,
+  const DeviceMemorySlice& src,
+  void* dst,
+  size_t size
+) {
+  CUDA_ASSERT << cuMemcpyDtoHAsync(dst, src.ptr, size, transact.stream);
+}
+
 
 
 }

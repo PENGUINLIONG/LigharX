@@ -140,22 +140,26 @@ struct Mesh {
 };
 
 
-
-struct SceneObject {
-  bool dirty;
-  OptixTraversableHandle trav;
+  // We need a stable address.
+struct SceneObjectInner {
   OptixAabb aabb;
-  // Vertex and index buffer. Vertex data is placed at first and index follows
-  // that.
+  size_t compact_size;
+  // Scene object is valid if this field is not null.
+  OptixTraversableHandle trav;
+  // Acceleration stucture memory.
   DeviceMemory devmem;
+};
+struct SceneObject {
+  SceneObjectInner* inner;
 };
 
 
 
 struct Transaction {
   CUstream stream;
-  DeviceMemory lparam_devmem;
+  std::vector<DeviceMemory> mnged_devmem;
 };
+
 
 
 }

@@ -125,7 +125,7 @@ extern void destroy_mesh(Mesh& mesh);
 
 
 
-extern SceneObject create_sobj(const Context& ctxt, const Mesh& mesh);
+extern SceneObject create_sobj(const Context& ctxt);
 extern void destroy_sobj(SceneObject& sobj);
 
 
@@ -135,7 +135,55 @@ extern void destroy_sobj(SceneObject& sobj);
 //
 // WARNING: `pipe` must be kept alive through out the lifetime of the created
 // transaction.
-extern Transaction init_transact(
+extern Transaction create_transact();
+// Check if a transaction is finished. Returns `true` if the all previous
+// commands are finished and `false` if the commands are still being processed.
+// If the previous commands are all finished, the transaction is awaited.
+extern bool pool_transact(const Transaction& trans);
+// Wait the transaction to complete. The transaction is awaited as the function
+// returns.
+extern void wait_transact(const Transaction& trans);
+// Release all related resources WITHOUT waiting it to finish.
+extern void destroy_transact(Transaction& trans);
+
+// Transfer ownership of a memory allocation to the given transaction. Any
+// managed allocation will be freed automatically when the trasaction is found
+// awaited.
+extern void manage_mem(Transaction& transact, DeviceMemory&& devmem);
+
+// The following functions are *command recording functions*. Command recording
+// functions record asynchronous procedure in the given transaction. The time
+// when the command gets executed is not guaranteed so the parameters MUST be
+// kept alive until the transaction is awaited.
+
+// Same as `transfer_mem`.
+extern void cmd_transfer_mem(
+  Transaction& transact,
+  const DeviceMemorySlice& src,
+  const DeviceMemorySlice& dst
+);
+// Same as `upload_mem`.
+extern void cmd_upload_mem(
+  Transaction& transact,
+  const void* src,
+  const DeviceMemorySlice& dst,
+  size_t size
+);
+// Same as `download_mem`.
+extern void cmd_download_mem(
+  Transaction& transact,
+  const DeviceMemorySlice& src,
+  void* dst,
+  size_t size
+);
+
+// Create a CUDA stream and launch the stream for OptiX scene traversal
+// controlled by the given pipeline.
+//
+// WARNING: `pipe` must be kept alive through out the lifetime of the created
+// transaction.
+extern void cmd_traverse(
+  Transaction& transact,
   const Pipeline& pipe,
   const Framebuffer& framebuf,
   OptixTraversableHandle trav
@@ -146,22 +194,28 @@ extern Transaction init_transact(
 // WARNING: `pipe` must be kept alive through out the lifetime of the created
 // transaction.
 template<typename TTrav,
-  typename _ = std::enable_if_t<std::is_same_v<decltype(TTrav::trav),
-    OptixTraversableHandle>>>
-Transaction init_transact(
+  typename _ = std::enable_if_t<std::is_same_v<
+  decltype(std::remove_pointer_t<typename decltype(TTrav::inner)>::trav),
+  OptixTraversableHandle>>>
+void cmd_traverse(
+  Transaction& transact,
   const Pipeline& pipe,
   const Framebuffer& framebuf,
   const TTrav& sobj
 ) {
-  return init_transact(pipe, framebuf, sobj.trav);
+  cmd_traverse(transact, pipe, framebuf, sobj.inner->trav);
 }
-// Check if a transaction is finished. Returns `true` if the transaction is
-// finished and `false` if the transaction is still being computed.
-bool pool_transact(const Transaction& trans);
-// Wait the transaction to complete.
-void wait_transact(const Transaction& trans);
-// Release all related resources WITHOUT waiting it to finish.
-void final_transact(Transaction& trans);
-
+extern void cmd_build_sobj(
+  Transaction& transact,
+  const Context& ctxt,
+  const Mesh& mesh,
+  SceneObject& sobj,
+  bool allow_compact = true
+);
+extern void cmd_compact_as(
+  Transaction& transact,
+  const Context& ctxt,
+  SceneObject& sobj
+);
 
 }
