@@ -336,7 +336,7 @@ void _set_pipe_stack_size(OptixPipeline pipe, const PipelineConfig& pipe_cfg) {
   const size_t DEFAULT_MAX_TRAV_GRAPH_DEPTH = 3;
   // TODO: (penguinliong) use stack size & max traversable depth depth hint from
   // pipeline config. These can be inferred from reveived PTX.
-  optixPipelineSetStackSize(
+  OPTIX_ASSERT << optixPipelineSetStackSize(
     pipe,
     DEFAULT_STACK_SIZE,
     DEFAULT_STACK_SIZE,
@@ -363,7 +363,7 @@ SbtPrep _create_sbt_prep(
   if (pipe_cfg.cfg_name##_cfg.name) {                                          \
     sbt.optix_name##Record = base + pipe_prep.sbt_##prep_name##_offset;        \
     auto hbase = sbt_hostbuf + pipe_prep.sbt_##prep_name##_offset;             \
-    optixSbtRecordPackHeader(pipe_prep.pgrps[i], hbase);                       \
+    OPTIX_ASSERT << optixSbtRecordPackHeader(pipe_prep.pgrps[i], hbase);       \
     std::memcpy(                                                               \
       hbase + OPTIX_SBT_RECORD_HEADER_SIZE,                                    \
       pipe_cfg.cfg_name##_cfg.data,                                            \
@@ -383,7 +383,7 @@ SbtPrep _create_sbt_prep(
   for (auto j = 0; j < pipe_prep.nsbt_##prep_name; ++j) {                      \
     auto hbase = sbt_hostbuf + pipe_prep.sbt_##prep_name##_offset +            \
       pipe_prep.sbt_##prep_name##_stride * j;                                  \
-    optixSbtRecordPackHeader(pipe_prep.pgrps[i], hbase);                       \
+    OPTIX_ASSERT << optixSbtRecordPackHeader(pipe_prep.pgrps[i], hbase);       \
     auto& cfg = pipe_cfg.cfg_name##_cfgs.at(j);                                \
     std::memcpy(hbase + OPTIX_SBT_RECORD_HEADER_SIZE, cfg.data, cfg.size);     \
     ++i;                                                                       \
@@ -429,11 +429,11 @@ Pipeline create_pipe(const Context& ctxt, const PipelineConfig& pipe_cfg) {
 }
 void destroy_pipe(Pipeline& pipe) {
   free_mem(pipe.sbt_devmem);
-  optixPipelineDestroy(pipe.pipe);
+  OPTIX_ASSERT << optixPipelineDestroy(pipe.pipe);
   for (auto pgrp : pipe.pgrps) {
-    optixProgramGroupDestroy(pgrp);
+    OPTIX_ASSERT << optixProgramGroupDestroy(pgrp);
   }
-  optixModuleDestroy(pipe.mod);
+  OPTIX_ASSERT << optixModuleDestroy(pipe.mod);
   pipe = Pipeline {};
   liong::log::info("destroyed pipeline");
 }
@@ -530,31 +530,29 @@ void destroy_mesh(Mesh& mesh) {
 }
 
 
-SceneObject create_sobj(const Context& ctxt) {
-  return SceneObject { new SceneObjectInner {} };
+SceneObject create_sobj() {
+  return SceneObject { new AsFeedback {} };
 }
 void destroy_sobj(SceneObject& sobj) {
   free_mem(sobj.inner->devmem);
   delete sobj.inner;
   sobj = {};
 }
+
+
+
+Scene create_scene(const std::vector<SceneObject>& sobjs) {
+  return Scene { new AsFeedback {}, sobjs };
+}
+void destroy_scene(Scene& scene) {
+  free_mem(scene.inner->devmem);
+  delete scene.inner;
+  scene= {};
+}
 /*
-struct Scene {
-  OptixTraversableHandle trav;
-  std::vector<SceneObject> sobjs;
-  DeviceMemory devmem;
-};
 struct DisassembledScene {
 };
-Scene create_scene(std::vector<SceneObject> sobjs) {
-  const static build_opt = {
-
-  };
-}
 DisassembledScene disasm_scene(std::vector<>)
-void destroy_scene(Scene& scene) {
-
-}
 */
 
 
@@ -564,23 +562,29 @@ Transaction create_transact() {
   CUDA_ASSERT << cuStreamCreate(&stream, CU_STREAM_DEFAULT);
   return Transaction { stream };
 }
-bool pool_transact(const Transaction& transact) {
+void _free_managed_mem(Transaction& transact) {
+  for (auto devmem : transact.mnged_devmems) {
+    free_mem(devmem);
+  }
+  transact.mnged_devmems.clear();
+}
+bool pool_transact(Transaction& transact) {
   auto res = cuStreamQuery(transact.stream);
   if (res == CUDA_SUCCESS) {
+    _free_managed_mem(transact);
     return true;
   } else if (res == CUDA_ERROR_NOT_READY) {
     return false;
   }
   CUDA_ASSERT << res;
 }
-void wait_transact(const Transaction& transact) {
+void wait_transact(Transaction& transact) {
   CUDA_ASSERT << cuStreamSynchronize(transact.stream);
+  _free_managed_mem(transact);
 }
 void destroy_transact(Transaction& transact) {
-  cuStreamDestroy(transact.stream);
-  for (auto devmem : transact.mnged_devmem) {
-    free_mem(devmem);
-  }
+  CUDA_ASSERT << cuStreamDestroy(transact.stream);
+  _free_managed_mem(transact);
   transact = {};
   liong::log::info("finalized transaction");
 }
@@ -588,7 +592,7 @@ void destroy_transact(Transaction& transact) {
 
 
 void manage_mem(Transaction& transact, DeviceMemory&& devmem) {
-  transact.mnged_devmem.emplace_back(std::forward<DeviceMemory>(devmem));
+  transact.mnged_devmems.emplace_back(std::forward<DeviceMemory>(devmem));
 }
 void cmd_transfer_mem(
   Transaction& transact,

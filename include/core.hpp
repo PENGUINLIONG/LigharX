@@ -6,7 +6,6 @@
 
 namespace liong {
 
-
 // Initialize core functionalities of OptixLab.
 extern void initialize();
 
@@ -39,21 +38,14 @@ extern void upload_mem(
 // Upload structured data to CUDA device memory.`dst` MUST be able to contain an
 // entire copy of content of `src`.
 template<typename TCont, typename TElem = typename TCont::value_type,
-  typename _ = std::enable_if<!std::is_trivially_copyable_v<TCont> &
-    std::is_same_v<decltype(TCont::size()), size_t> &
-    std::is_trivially_copyable_v<TElem> &
-    std::is_pointer_v<decltype(TCont::data)>>>
+  typename _ = std::enable_if<type_traits::is_buffer_container_v<TCont>>>
 void upload_mem(const TCont& src, const DeviceMemorySlice& dst) {
-  upload_mem(
-    src.data(),
-    dst,
-    sizeof(TElem) * src.size()
-  );
+  upload_mem(src.data(), dst, sizeof(TElem) * src.size());
 }
 // Upload structured data to CUDA device memory.`dst` MUST be able to contain an
 // entire copy of content of `src`.
 template<typename T,
-  typename _ = std::enable_if<std::is_trivially_copyable_v<T>>>
+  typename _ = std::enable_if<type_traits::is_buffer_object_v<T>>>
 void upload_mem(const T& src, const DeviceMemorySlice& dst) {
   upload_mem(&src, dst, sizeof(T));
 }
@@ -63,21 +55,14 @@ extern void download_mem(const DeviceMemorySlice& src, void* dst, size_t size);
 // Download structured data from CUDA device memory. If the size of `dst` is
 // smaller than the `src`, a truncated copy of `src` is downloaded.
 template<typename TCont, typename TElem = typename TCont::value_type,
-  typename _ = std::enable_if<!std::is_trivially_copyable_v<TCont> & 
-    std::is_same_v<decltype(TCont::size()), size_t> &
-    std::is_trivially_copyable_v<TElem> &
-    std::is_pointer_v<decltype(TCont::data)>>>
+  typename _ = std::enable_if<type_traits::is_buffer_container_v<TCont>>>
 void download_mem(const DeviceMemorySlice& src, TCont& dst) {
-  download_mem(
-    src,
-    (void*)dst.data(),
-    sizeof(TElem) * dst.size()
-  );
+  download_mem(src, dst.data(), sizeof(TElem) * dst.size());
 }
 // Download data from CUDA device memory. If the size of `dst` if smaller than
 // the `src`, a truncated copy of `src` is downloaded.
 template<typename T,
-  typename _ = std::enable_if<std::is_trivially_copyable_v<T>>>
+  typename _ = std::enable_if<type_traits::is_buffer_object_v<T>>>
 void download_mem(const DeviceMemorySlice& src, T& dst) {
   download_mem(src, &dst, sizeof(T));
 }
@@ -86,14 +71,13 @@ void download_mem(const DeviceMemorySlice& src, T& dst) {
 extern DeviceMemory shadow_mem(const void* buf, size_t size, size_t align = 1);
 // Copy the content of `buf` to a new memory allocation on a device. The memory
 // can be accessed globally by multiple streams.
-template<typename T,
-  typename _ = std::enable_if<std::is_trivially_copyable_v<T>>>
-DeviceMemory shadow_mem(const std::vector<T>& buf, size_t align = 1) {
-  return shadow_mem(reinterpret_cast<const void*>(buf.data()),
-    sizeof(T) * buf.size(), align);
+template<typename TCont, typename TElem = typename TCont::value_type,
+  typename _ = std::enable_if<type_traits::is_buffer_container_v<TCont>>>
+DeviceMemory shadow_mem(const TCont& buf, size_t align = 1) {
+  return shadow_mem(buf.data(), sizeof(TElem) * buf.size(), align);
 }
 template<typename T,
-  typename _ = std::enable_if<std::is_trivially_copyable_v<T>>>
+  typename _ = std::enable_if<type_traits::is_buffer_object_v<T>>>
 DeviceMemory shadow_mem(const T& buf, size_t align = 1) {
   return shadow_mem(&buf, sizeof(T), align);
 }
@@ -125,8 +109,13 @@ extern void destroy_mesh(Mesh& mesh);
 
 
 
-extern SceneObject create_sobj(const Context& ctxt);
+extern SceneObject create_sobj();
 extern void destroy_sobj(SceneObject& sobj);
+
+
+
+extern Scene create_scene(const std::vector<SceneObject>& sobjs);
+extern void destroy_scene(Scene& scene);
 
 
 
@@ -139,10 +128,10 @@ extern Transaction create_transact();
 // Check if a transaction is finished. Returns `true` if the all previous
 // commands are finished and `false` if the commands are still being processed.
 // If the previous commands are all finished, the transaction is awaited.
-extern bool pool_transact(const Transaction& trans);
+extern bool pool_transact(Transaction& trans);
 // Wait the transaction to complete. The transaction is awaited as the function
 // returns.
-extern void wait_transact(const Transaction& trans);
+extern void wait_transact(Transaction& trans);
 // Release all related resources WITHOUT waiting it to finish.
 extern void destroy_transact(Transaction& trans);
 
@@ -195,8 +184,8 @@ extern void cmd_traverse(
 // transaction.
 template<typename TTrav,
   typename _ = std::enable_if_t<std::is_same_v<
-  decltype(std::remove_pointer_t<typename decltype(TTrav::inner)>::trav),
-  OptixTraversableHandle>>>
+    decltype(std::remove_pointer_t<typename decltype(TTrav::inner)>::trav),
+    OptixTraversableHandle>>>
 void cmd_traverse(
   Transaction& transact,
   const Pipeline& pipe,
@@ -210,12 +199,30 @@ extern void cmd_build_sobj(
   const Context& ctxt,
   const Mesh& mesh,
   SceneObject& sobj,
-  bool allow_compact = true
+  bool can_compact = true
 );
-extern void cmd_compact_as(
+extern void cmd_build_scene(
   Transaction& transact,
   const Context& ctxt,
-  SceneObject& sobj
+  Scene& scene,
+  bool can_compact = true
 );
+// Compact traversable object memory.
+extern void cmd_compact_mem(
+  Transaction& transact,
+  const Context& ctxt,
+  AsFeedback* as_fb
+);
+template<typename TTrav,
+  typename _ = std::enable_if_t<std::is_same_v<
+    decltype(std::remove_pointer_t<typename decltype(TTrav::inner)>::trav),
+    OptixTraversableHandle>>>
+void cmd_compact_mem(
+  Transaction& transact,
+  const Context& ctxt,
+  const TTrav& x
+) {
+  cmd_compact_mem(transact, ctxt, x.inner);
+}
 
 }

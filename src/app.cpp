@@ -112,7 +112,7 @@ MeshConfig l_create_cube_cfg(const Transform& world2obj) {
   mesh_cfg.vert_stride = 12;
   mesh_cfg.idx_buf = idxs;
   mesh_cfg.idx_fmt = OPTIX_INDICES_FORMAT_UNSIGNED_SHORT3;
-  mesh_cfg.ntri = 12;
+  mesh_cfg.ntri = 2;
   mesh_cfg.tri_stride = 6;
   return mesh_cfg;
 }
@@ -135,7 +135,7 @@ MeshConfig l_create_pln_cfg(const Transform& world2obj) {
   mesh_cfg.vert_stride = 12;
   mesh_cfg.idx_buf = idxs;
   mesh_cfg.idx_fmt = OPTIX_INDICES_FORMAT_UNSIGNED_SHORT3;
-  mesh_cfg.ntri = 2;
+  mesh_cfg.ntri = 1;
   mesh_cfg.tri_stride = 6;
   return mesh_cfg;
 }
@@ -161,6 +161,7 @@ int main() {
   Framebuffer framebuf;
   Mesh mesh;
   SceneObject sobj;
+  Scene scene;
   Transaction transact;
 
   try {
@@ -168,14 +169,19 @@ int main() {
     pipe = create_pipe(ctxt, pipe_cfg);
     framebuf = create_framebuf(32, 32);
     mesh = create_mesh(mesh_cfg);
-    sobj = create_sobj(ctxt);
+    sobj = create_sobj();
+    scene = create_scene({ sobj });
     transact = create_transact();
 
     cmd_build_sobj(transact, ctxt, mesh, sobj);
     wait_transact(transact);
-    cmd_compact_as(transact, ctxt, sobj);
+    cmd_compact_mem(transact, ctxt, sobj);
     wait_transact(transact);
-    cmd_traverse(transact, pipe, framebuf, sobj);
+    cmd_build_scene(transact, ctxt, scene);
+    wait_transact(transact);
+    cmd_compact_mem(transact, ctxt, scene);
+    wait_transact(transact);
+    cmd_traverse(transact, pipe, framebuf, scene);
     wait_transact(transact);
 
     snapshot_framebuf(framebuf, "./snapshot.bmp");
@@ -188,6 +194,7 @@ int main() {
     liong::log::error("application threw an illiterate exception");
   }
   destroy_transact(transact);
+  destroy_scene(scene);
   destroy_sobj(sobj);
   destroy_mesh(mesh);
   destroy_framebuf(framebuf);

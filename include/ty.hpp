@@ -140,8 +140,9 @@ struct Mesh {
 };
 
 
-  // We need a stable address.
-struct SceneObjectInner {
+
+// We need a stable address for asynchronous output.
+struct AsFeedback {
   OptixAabb aabb;
   size_t compact_size;
   // Scene object is valid if this field is not null.
@@ -150,16 +151,34 @@ struct SceneObjectInner {
   DeviceMemory devmem;
 };
 struct SceneObject {
-  SceneObjectInner* inner;
+  AsFeedback* inner;
+};
+struct Scene {
+  AsFeedback* inner;
+  std::vector<SceneObject> sobjs;
 };
 
 
 
 struct Transaction {
   CUstream stream;
-  std::vector<DeviceMemory> mnged_devmem;
+  std::vector<DeviceMemory> mnged_devmems;
 };
 
 
+
+namespace type_traits {
+
+template<typename TCont, typename TElem = typename TCont::value_type>
+constexpr bool is_buffer_container_v = !std::is_trivially_copyable_v<TCont> &
+  std::is_same_v<decltype(TCont::size()), size_t> &
+  std::is_trivially_copyable_v<TElem> &
+  std::is_pointer_v<decltype(TCont::data)>;
+
+template<typename T>
+constexpr bool is_buffer_object_v = std::is_trivially_copyable_v<T> &
+  !std::is_pointer_v<T>;
+
+}
 
 }

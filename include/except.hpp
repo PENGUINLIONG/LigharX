@@ -38,7 +38,7 @@ public:
 };
 struct OptixAssert {
   inline const OptixAssert& operator<<(OptixResult code) const {
-    if (code != CUDA_SUCCESS) { throw OptixException(code); }
+    if (code != OPTIX_SUCCESS) { throw OptixException(code); }
     return *this;
   }
 };
