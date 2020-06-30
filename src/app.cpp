@@ -75,7 +75,7 @@ MeshConfig l_create_mesh_cfg() {
   return mesh_cfg;
 }
 
-MeshConfig l_create_cube_cfg(const Transform& world2obj) {
+MeshConfig l_create_cube_cfg(const mat3x4& world2obj) {
   auto obj2world = world2obj.inverse();
   const float p = 0.5;
   const float n = -0.5;
@@ -117,7 +117,7 @@ MeshConfig l_create_cube_cfg(const Transform& world2obj) {
   return mesh_cfg;
 }
 
-MeshConfig l_create_pln_cfg(const Transform& world2obj) {
+MeshConfig l_create_pln_cfg(const mat3x4& world2obj) {
   auto obj2world = world2obj.inverse();
   static const float verts[] = {
     -0.5, 0.0, -0.5,

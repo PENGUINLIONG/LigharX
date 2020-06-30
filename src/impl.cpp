@@ -735,7 +735,7 @@ void cmd_build_scene(
   }
   auto insts_devmem = shadow_mem(insts, sizeof(OptixInstance) * ninst,
     OPTIX_INSTANCE_BYTE_ALIGNMENT);
-  delete insts;
+  delete[] insts;
 
   OptixBuildInput build_in {};
   build_in.type = OPTIX_BUILD_INPUT_TYPE_INSTANCES;
@@ -767,7 +767,6 @@ void cmd_compact_mem(
   manage_mem(transact, std::move(uncompact_devmem));
   liong::log::info("scheduled memory compaction");
 }
-
 
 
 }

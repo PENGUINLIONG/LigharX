@@ -1,10 +1,12 @@
 #include "x.hpp"
+#include "x-mat.hpp"
 
 namespace liong {
 
 extern "C" __constant__ LaunchConfig cfg;
 
 extern "C" __global__ void __closesthit__() {
+  auto mat = GET_MATERIAL_PTR(HitMaterial);
   auto pColor = (uint32_t*)WORDS2PTR(optixGetPayload_0(), optixGetPayload_1());
   *pColor = 0xFFFF00FF;
 }
@@ -13,6 +15,7 @@ extern "C" __global__ void __anyhit__() {
 }
 
 extern "C" __global__ void __miss__() {
+  auto mat = GET_MATERIAL_PTR(MissMaterial);
   auto pColor = (uint32_t*)WORDS2PTR(optixGetPayload_0(), optixGetPayload_1());
   *pColor = 0xFF000000;
 }
