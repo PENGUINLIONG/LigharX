@@ -68,7 +68,7 @@ void download_mem(const DeviceMemorySlice& src, T& dst) {
 }
 // Copy a slice of host memory to a new memory allocation on a device. The
 // memory can be accessed globally by multiple streams.
-extern DeviceMemory shadow_mem(const void* buf, size_t size, size_t align = 1);
+extern DeviceMemory shadow_mem(const void* buf, size_t size, size_t align);
 // Copy the content of `buf` to a new memory allocation on a device. The memory
 // can be accessed globally by multiple streams.
 template<typename TCont, typename TElem = typename TCont::value_type,
@@ -104,7 +104,7 @@ extern void snapshot_framebuf(const Framebuffer& framebuf, const char* path);
 
 
 
-extern Mesh create_mesh(const MeshConfig& mesh_cfg);
+extern Mesh create_mesh(const MeshConfig& mesh_cfg, size_t mat_size = 0);
 extern void destroy_mesh(Mesh& mesh);
 
 

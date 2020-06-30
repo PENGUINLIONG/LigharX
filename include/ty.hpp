@@ -137,6 +137,11 @@ struct Mesh {
   DeviceMemorySlice vert_slice;
   DeviceMemorySlice idx_slice;
   OptixBuildInput build_in;
+  // Material buffer allocated in the size specified by the user. The user
+  // SHOULD directly write into this buffer to turn in the material data.
+  void* mat;
+  // Size of the material buffer.
+  size_t mat_size;
 };
 
 
@@ -151,13 +156,19 @@ struct AsFeedback {
   DeviceMemory devmem;
 };
 struct SceneObject {
+  // Acceleration structure build feedback.
   AsFeedback* inner;
+  // Material data buffer.
+  DeviceMemory mat_devmem;
 };
 struct Scene {
+  // Acceleration structure build feedback.
   AsFeedback* inner;
+  // Scene objects as components in the scene
   std::vector<SceneObject> sobjs;
+  // Maximal size of an SBT record aligned to `OPTIX_SBT_RECORD_ALIGNMENT`.
+  size_t sbt_stride;
 };
-
 
 
 struct Transaction {
@@ -173,7 +184,7 @@ template<typename TCont, typename TElem = typename TCont::value_type>
 constexpr bool is_buffer_container_v = !std::is_trivially_copyable_v<TCont> &
   std::is_same_v<decltype(TCont::size()), size_t> &
   std::is_trivially_copyable_v<TElem> &
-  std::is_pointer_v<decltype(TCont::data)>;
+  !std::is_pointer_v<decltype(TCont::data)>;
 
 template<typename T>
 constexpr bool is_buffer_object_v = std::is_trivially_copyable_v<T> &

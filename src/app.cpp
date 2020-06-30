@@ -41,6 +41,9 @@ PipelineConfig l_create_pipe_cfg() {
     auto hitgrp_cfg = PipelineHitGroupConfig {};
     hitgrp_cfg.ch_name = "__closesthit__";
     hitgrp_cfg.ah_name = "__anyhit__";
+    const static uint32_t color[] = { 0xFFFFFFFF };
+    hitgrp_cfg.data = color;
+    hitgrp_cfg.size = sizeof(uint32_t);
     pipe_cfg.hitgrp_cfgs.push_back(hitgrp_cfg);
   }
   {
@@ -168,7 +171,7 @@ int main() {
     ctxt = create_ctxt();
     pipe = create_pipe(ctxt, pipe_cfg);
     framebuf = create_framebuf(32, 32);
-    mesh = create_mesh(mesh_cfg);
+    mesh = create_mesh(mesh_cfg, 0);
     sobj = create_sobj();
     scene = create_scene({ sobj });
     transact = create_transact();

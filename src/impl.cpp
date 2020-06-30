@@ -55,7 +55,9 @@ Context create_ctxt(int dev_idx) {
   return Context { dev, cuda_ctxt, optix_dc };
 }
 void destroy_ctxt(Context& ctxt) {
-  OPTIX_ASSERT << optixDeviceContextDestroy(ctxt.optix_dc);
+  if (ctxt.optix_dc) {
+    OPTIX_ASSERT << optixDeviceContextDestroy(ctxt.optix_dc);
+  }
   ctxt = {};
   liong::log::info("destroyed optix context");
 }
@@ -77,6 +79,7 @@ template<typename T,
 
 
 DeviceMemory alloc_mem(size_t size, size_t align) {
+  if (size == 0) { return {}; }
   CUdeviceptr devmem {};
   auto aligned_size = align_size(size, align);
   CUDA_ASSERT << cuMemAlloc(&devmem, aligned_size);
@@ -89,7 +92,7 @@ DeviceMemory alloc_mem(size_t size, size_t align) {
   };
 }
 void free_mem(DeviceMemory& devmem) {
-  CUDA_ASSERT << cuMemFree(devmem.alloc_base);
+  if (devmem.alloc_base) { CUDA_ASSERT << cuMemFree(devmem.alloc_base); }
   liong::log::info("freed memory of ", devmem.size, " bytes");
   devmem = {};
 }
@@ -103,11 +106,13 @@ void transfer_mem(const DeviceMemorySlice& src, const DeviceMemorySlice& dst) {
   CUDA_ASSERT << cuMemcpy(dst.ptr, src.ptr, src.size);
 }
 void upload_mem(const void* src, const DeviceMemorySlice& dst, size_t size) {
+  if (size == 0) { return; }
   ASSERT << (size <= dst.size)
     << "memory read out of range";
   CUDA_ASSERT << cuMemcpyHtoD(dst.ptr, src, size);
 }
 void download_mem(const DeviceMemorySlice& src, void* dst, size_t size) {
+  if (size == 0) { return; }
   CUDA_ASSERT << cuMemcpyDtoH(dst, src.ptr, size);
 }
 
@@ -235,7 +240,7 @@ PipelinePrep _create_pipe_prep(
     pgrp_desc.raygen.entryFunctionName = ms_cfg.name;
     pgrp_descs.push_back(pgrp_desc);
     pipe_prep.sbt_miss_stride =
-      std::max(ms_cfg.size, _sbt_align(pipe_prep.sbt_miss_stride));
+      std::max(_sbt_align(ms_cfg.size), pipe_prep.sbt_miss_stride);
   }
   sbt_size += pipe_prep.sbt_miss_stride * pipe_prep.nsbt_miss;
 
@@ -258,7 +263,7 @@ PipelinePrep _create_pipe_prep(
     }
     pgrp_descs.push_back(pgrp_desc);
     pipe_prep.sbt_hitgrp_stride =
-      std::max(hitgrp_cfg.size, _sbt_align(pipe_prep.sbt_hitgrp_stride));
+      std::max(_sbt_align(hitgrp_cfg.size), pipe_prep.sbt_hitgrp_stride);
   }
   sbt_size += pipe_prep.sbt_hitgrp_stride * pipe_prep.nsbt_hitgrp;
 
@@ -271,7 +276,7 @@ PipelinePrep _create_pipe_prep(
     pgrp_desc.callables.entryFunctionNameDC = dc_cfg.name;
     pgrp_descs.push_back(pgrp_desc);
     pipe_prep.sbt_call_stride =
-      std::max(dc_cfg.size, _sbt_align(pipe_prep.sbt_call_stride));
+      std::max(_sbt_align(dc_cfg.size), pipe_prep.sbt_call_stride);
   }
   for (auto& cc_cfg : pipe_cfg.cc_cfgs) {
     OptixProgramGroupDesc pgrp_desc {};
@@ -280,7 +285,7 @@ PipelinePrep _create_pipe_prep(
     pgrp_desc.callables.entryFunctionNameCC = cc_cfg.name;
     pgrp_descs.push_back(pgrp_desc);
     pipe_prep.sbt_call_stride =
-      std::max(cc_cfg.size, _sbt_align(pipe_prep.sbt_call_stride));
+      std::max(_sbt_align(cc_cfg.size), pipe_prep.sbt_call_stride);
   }
   sbt_size += pipe_prep.sbt_call_stride * pipe_prep.nsbt_call;
   // <<< ORDER IS IMPORTANT; DO NOT RESORT
@@ -429,12 +434,12 @@ Pipeline create_pipe(const Context& ctxt, const PipelineConfig& pipe_cfg) {
 }
 void destroy_pipe(Pipeline& pipe) {
   free_mem(pipe.sbt_devmem);
-  OPTIX_ASSERT << optixPipelineDestroy(pipe.pipe);
+  if (pipe.pipe) { OPTIX_ASSERT << optixPipelineDestroy(pipe.pipe); }
   for (auto pgrp : pipe.pgrps) {
-    OPTIX_ASSERT << optixProgramGroupDestroy(pgrp);
+    if (pgrp) { OPTIX_ASSERT << optixProgramGroupDestroy(pgrp); }
   }
-  OPTIX_ASSERT << optixModuleDestroy(pipe.mod);
-  pipe = Pipeline {};
+  if (pipe.mod) { OPTIX_ASSERT << optixModuleDestroy(pipe.mod); }
+  pipe = {};
   liong::log::info("destroyed pipeline");
 }
 
@@ -491,7 +496,7 @@ void snapshot_framebuf(const Framebuffer& framebuf, const char* path) {
   f.close();
 }
 
-Mesh create_mesh(const MeshConfig& mesh_cfg) {
+Mesh create_mesh(const MeshConfig& mesh_cfg, size_t mat_size) {
   auto vert_buf_size = mesh_cfg.nvert * mesh_cfg.vert_stride;
   auto idx_buf_size = mesh_cfg.ntri * mesh_cfg.tri_stride;
 
@@ -520,23 +525,41 @@ Mesh create_mesh(const MeshConfig& mesh_cfg) {
   build_in.triangleArray.flags = new uint32_t[1] {};
   build_in.triangleArray.numSbtRecords = 1;
 
-  return Mesh { devmem, vert_slice, idx_slice, build_in };
+  return Mesh {
+    devmem,
+    vert_slice,
+    idx_slice,
+    build_in,
+    new char[mat_size],
+    mat_size
+  };
 }
 void destroy_mesh(Mesh& mesh) {
-  delete[] mesh.build_in.triangleArray.flags;
-  delete mesh.build_in.triangleArray.vertexBuffers;
+  if (mesh.build_in.triangleArray.flags) {
+    delete[] mesh.build_in.triangleArray.flags;
+  }
+  if (mesh.build_in.triangleArray.vertexBuffers) {
+    delete mesh.build_in.triangleArray.vertexBuffers;
+  }
   free_mem(mesh.devmem);
+  if (mesh.mat) { delete[] (char*)mesh.mat; }
   mesh = {};
+  liong::log::info("destroyed mesh");
 }
 
 
+// Create a scene object and allocate a `mat_size`ed uninitialized material
+// buffer.
 SceneObject create_sobj() {
-  return SceneObject { new AsFeedback {} };
+  return SceneObject { new AsFeedback {}, DeviceMemory {} };
 }
 void destroy_sobj(SceneObject& sobj) {
-  free_mem(sobj.inner->devmem);
-  delete sobj.inner;
+  if (sobj.inner) {
+    free_mem(sobj.inner->devmem);
+    delete sobj.inner;
+  }
   sobj = {};
+  liong::log::info("destroyed scene object");
 }
 
 
@@ -546,14 +569,10 @@ Scene create_scene(const std::vector<SceneObject>& sobjs) {
 }
 void destroy_scene(Scene& scene) {
   free_mem(scene.inner->devmem);
-  delete scene.inner;
-  scene= {};
+  if (scene.inner) { delete scene.inner; }
+  scene = {};
+  liong::log::info("destroyed scene");
 }
-/*
-struct DisassembledScene {
-};
-DisassembledScene disasm_scene(std::vector<>)
-*/
 
 
 
@@ -583,7 +602,7 @@ void wait_transact(Transaction& transact) {
   _free_managed_mem(transact);
 }
 void destroy_transact(Transaction& transact) {
-  CUDA_ASSERT << cuStreamDestroy(transact.stream);
+  if (transact.stream) { CUDA_ASSERT << cuStreamDestroy(transact.stream); }
   _free_managed_mem(transact);
   transact = {};
   liong::log::info("finalized transaction");
@@ -707,6 +726,7 @@ void cmd_build_sobj(
 ) {
   // TODO (penguinliong): Check for already allocated output memory.
   _cmd_build_as(transact, ctxt, mesh.build_in, sobj.inner, can_compact);
+  sobj.mat_devmem = shadow_mem(mesh.mat, mesh.mat_size, 0);
   liong::log::info("scheduled scene object build");
 }
 
@@ -725,6 +745,7 @@ void cmd_build_scene(
     inst.transform[5] = 1.0f;
     inst.transform[10] = 1.0f;
     inst.instanceId = i;
+    inst.sbtOffset = i * scene.sbt_stride;
     // TODO: (penguinliong) Do we need instance layering for rays?
     // WARNING: DO NOT use `~0` instead of 255. 2 of my precious hours has been
     // wasted here. That's brutal.
