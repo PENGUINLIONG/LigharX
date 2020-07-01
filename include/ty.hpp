@@ -44,14 +44,11 @@ struct DeviceMemory {
 };
 
 
-
 struct PipelineStageConfig {
   // Name of the stage function in provided module.
   const char* name;
-  // Data used in a pipeline stage which will be copied to device memory.
-  const void* data;
-  // Size of `data` in bytes.
-  size_t size;
+  // Size of data used by a pipeline stage as shader runtime parameter.
+  size_t data_size;
 };
 struct PipelineHitGroupConfig {
   // Intersection stage function name.
@@ -60,10 +57,18 @@ struct PipelineHitGroupConfig {
   const char* ah_name;
   // Closest-hit stage function name.
   const char* ch_name;
-  // Data used by a hit group which will be copied to device memory.
-  const void* data;
-  // Size of `data` in bytes.
-  size_t size;
+  // Size of data used by a hit group as shader runtime parameter.
+  size_t data_size;
+};
+struct PipelineCallableConfig {
+  // Name of the callable in provided module.
+  const char* name;
+  // The callable is continuation callable.
+  bool is_cc;
+  // The callable is direct callable.
+  bool is_dc;
+  // Size of data used by a callable as shader runtime parameter.
+  size_t data_size;
 };
 // All the data necessary in pipeline createion.
 struct PipelineConfig {
@@ -90,14 +95,38 @@ struct PipelineConfig {
   PipelineStageConfig ex_cfg;
   std::vector<PipelineStageConfig> ms_cfgs;
   std::vector<PipelineHitGroupConfig> hitgrp_cfgs;
-  std::vector<PipelineStageConfig> dc_cfgs;
-  std::vector<PipelineStageConfig> cc_cfgs;
+  std::vector<PipelineCallableConfig> call_cfgs;
+};
+struct PipelineLayout {
+  size_t sbt_raygen_offset;
+  size_t sbt_raygen_stride;
+
+  size_t sbt_except_offset;
+  size_t sbt_except_stride;
+
+  size_t sbt_miss_offset;
+  size_t sbt_miss_stride;
+  size_t nsbt_miss;
+
+  size_t sbt_hitgrp_offset;
+  size_t sbt_hitgrp_stride;
+  size_t nsbt_hitgrp;
+
+  size_t sbt_call_offset;
+  size_t sbt_call_stride;
+  size_t nsbt_call;
+
+  size_t sbt_size;
 };
 // Pipeline-related opaque resources.
 struct Pipeline {
   OptixModule mod;
   std::vector<OptixProgramGroup> pgrps;
   OptixPipeline pipe;
+  PipelineLayout pipe_layout;
+};
+// Data to stuff in pipelines as runtime parameters.
+struct PipelineData {
   OptixShaderBindingTable sbt;
   DeviceMemory sbt_devmem;
 };
@@ -155,12 +184,14 @@ struct AsFeedback {
   // Acceleration stucture memory.
   DeviceMemory devmem;
 };
+// Traversable single object.
 struct SceneObject {
   // Acceleration structure build feedback.
   AsFeedback* inner;
   // Material data buffer.
   DeviceMemory mat_devmem;
 };
+// Traversable object collection.
 struct Scene {
   // Acceleration structure build feedback.
   AsFeedback* inner;

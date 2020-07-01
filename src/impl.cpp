@@ -79,7 +79,7 @@ template<typename T,
 
 
 DeviceMemory alloc_mem(size_t size, size_t align) {
-  if (size == 0) { return {}; }
+  if (size == 0) { return DeviceMemory {}; }
   CUdeviceptr devmem {};
   auto aligned_size = align_size(size, align);
   CUDA_ASSERT << cuMemAlloc(&devmem, aligned_size);
@@ -172,24 +172,7 @@ OptixModule _create_mod(
 }
 struct PipelinePrep {
   std::vector<OptixProgramGroup> pgrps;
-
-  size_t sbt_raygen_offset;
-
-  size_t sbt_except_offset;
-
-  size_t sbt_miss_offset;
-  size_t sbt_miss_stride;
-  size_t nsbt_miss;
-
-  size_t sbt_hitgrp_offset;
-  size_t sbt_hitgrp_stride;
-  size_t nsbt_hitgrp;
-
-  size_t sbt_call_offset;
-  size_t sbt_call_stride;
-  size_t nsbt_call;
-
-  size_t sbt_size;
+  PipelineLayout pipe_layout;
 };
 constexpr size_t _sbt_align(size_t size) {
   return align_addr(
@@ -207,45 +190,48 @@ PipelinePrep _create_pipe_prep(
   size_t log_len = LOG_LEN;
 
   PipelinePrep pipe_prep {};
+  auto& pipe_layout = pipe_prep.pipe_layout;
   std::vector<OptixProgramGroupDesc> pgrp_descs {};
   // Conservative size of device memory to contain all data referred by SBT.
   size_t sbt_size = 0, sbt_kind_max_size;
   // ORDER IS IMPORTANT; DO NOT RESORT >>>
-  pipe_prep.sbt_raygen_offset = sbt_size;
+  pipe_layout.sbt_raygen_offset = sbt_size;
   if (pipe_cfg.rg_cfg.name) {
     OptixProgramGroupDesc pgrp_desc {};
     pgrp_desc.kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
     pgrp_desc.raygen.module = mod;
     pgrp_desc.raygen.entryFunctionName = pipe_cfg.rg_cfg.name;
     pgrp_descs.push_back(pgrp_desc);
-    sbt_size += _sbt_align(pipe_cfg.rg_cfg.size);
+    pipe_layout.sbt_raygen_stride = _sbt_align(pipe_cfg.rg_cfg.data_size);
   }
+  sbt_size += pipe_layout.sbt_raygen_stride;
 
-  pipe_prep.sbt_except_offset = sbt_size;
+  pipe_layout.sbt_except_offset = sbt_size;
   if (pipe_cfg.ex_cfg.name) {
     OptixProgramGroupDesc pgrp_desc {};
     pgrp_desc.kind = OPTIX_PROGRAM_GROUP_KIND_EXCEPTION;
     pgrp_desc.raygen.module = mod;
     pgrp_desc.raygen.entryFunctionName = pipe_cfg.ex_cfg.name;
     pgrp_descs.push_back(pgrp_desc);
-    sbt_size += _sbt_align(pipe_cfg.ex_cfg.size);
+    pipe_layout.sbt_except_stride = _sbt_align(pipe_cfg.ex_cfg.data_size);
   }
+  sbt_size += pipe_layout.sbt_except_stride;
 
-  pipe_prep.sbt_miss_offset = sbt_size;
-  pipe_prep.nsbt_miss = pipe_cfg.ms_cfgs.size();
+  pipe_layout.sbt_miss_offset = sbt_size;
+  pipe_layout.nsbt_miss = pipe_cfg.ms_cfgs.size();
   for (auto& ms_cfg : pipe_cfg.ms_cfgs) {
     OptixProgramGroupDesc pgrp_desc {};
     pgrp_desc.kind = OPTIX_PROGRAM_GROUP_KIND_MISS;
     pgrp_desc.raygen.module = mod;
     pgrp_desc.raygen.entryFunctionName = ms_cfg.name;
     pgrp_descs.push_back(pgrp_desc);
-    pipe_prep.sbt_miss_stride =
-      std::max(_sbt_align(ms_cfg.size), pipe_prep.sbt_miss_stride);
+    pipe_layout.sbt_miss_stride =
+      std::max(_sbt_align(ms_cfg.data_size), pipe_layout.sbt_miss_stride);
   }
-  sbt_size += pipe_prep.sbt_miss_stride * pipe_prep.nsbt_miss;
+  sbt_size += pipe_layout.sbt_miss_stride * pipe_layout.nsbt_miss;
 
-  pipe_prep.sbt_hitgrp_offset = sbt_size;
-  pipe_prep.nsbt_hitgrp = pipe_cfg.hitgrp_cfgs.size();
+  pipe_layout.sbt_hitgrp_offset = sbt_size;
+  pipe_layout.nsbt_hitgrp = pipe_cfg.hitgrp_cfgs.size();
   for (auto& hitgrp_cfg : pipe_cfg.hitgrp_cfgs) {
     OptixProgramGroupDesc pgrp_desc {};
     pgrp_desc.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;
@@ -262,36 +248,33 @@ PipelinePrep _create_pipe_prep(
       pgrp_desc.hitgroup.entryFunctionNameIS = hitgrp_cfg.is_name;
     }
     pgrp_descs.push_back(pgrp_desc);
-    pipe_prep.sbt_hitgrp_stride =
-      std::max(_sbt_align(hitgrp_cfg.size), pipe_prep.sbt_hitgrp_stride);
+    pipe_layout.sbt_hitgrp_stride =
+      std::max(_sbt_align(hitgrp_cfg.data_size), pipe_layout.sbt_hitgrp_stride);
   }
-  sbt_size += pipe_prep.sbt_hitgrp_stride * pipe_prep.nsbt_hitgrp;
+  sbt_size += pipe_layout.sbt_hitgrp_stride * pipe_layout.nsbt_hitgrp;
 
-  pipe_prep.sbt_call_offset = sbt_size;
-  pipe_prep.nsbt_call = pipe_cfg.dc_cfgs.size() + pipe_cfg.cc_cfgs.size();
-  for (auto& dc_cfg : pipe_cfg.dc_cfgs) {
+  pipe_layout.sbt_call_offset = sbt_size;
+  pipe_layout.nsbt_call = pipe_cfg.call_cfgs.size();
+  for (auto& call_cfg : pipe_cfg.call_cfgs) {
     OptixProgramGroupDesc pgrp_desc {};
     pgrp_desc.kind = OPTIX_PROGRAM_GROUP_KIND_CALLABLES;
-    pgrp_desc.callables.moduleDC = mod;
-    pgrp_desc.callables.entryFunctionNameDC = dc_cfg.name;
+    if (call_cfg.is_cc) {
+      pgrp_desc.callables.moduleCC = mod;
+      pgrp_desc.callables.entryFunctionNameCC = call_cfg.name;
+    }
+    if (call_cfg.is_dc) {
+      pgrp_desc.callables.moduleDC = mod;
+      pgrp_desc.callables.entryFunctionNameDC = call_cfg.name;
+    }
     pgrp_descs.push_back(pgrp_desc);
-    pipe_prep.sbt_call_stride =
-      std::max(_sbt_align(dc_cfg.size), pipe_prep.sbt_call_stride);
+    pipe_layout.sbt_call_stride =
+      std::max(_sbt_align(call_cfg.data_size), pipe_layout.sbt_call_stride);
   }
-  for (auto& cc_cfg : pipe_cfg.cc_cfgs) {
-    OptixProgramGroupDesc pgrp_desc {};
-    pgrp_desc.kind = OPTIX_PROGRAM_GROUP_KIND_CALLABLES;
-    pgrp_desc.callables.moduleCC = mod;
-    pgrp_desc.callables.entryFunctionNameCC = cc_cfg.name;
-    pgrp_descs.push_back(pgrp_desc);
-    pipe_prep.sbt_call_stride =
-      std::max(_sbt_align(cc_cfg.size), pipe_prep.sbt_call_stride);
-  }
-  sbt_size += pipe_prep.sbt_call_stride * pipe_prep.nsbt_call;
+  sbt_size += pipe_layout.sbt_call_stride * pipe_layout.nsbt_call;
   // <<< ORDER IS IMPORTANT; DO NOT RESORT
 
   OptixProgramGroupOptions opt;
-  std::vector<OptixProgramGroup> pgrps;
+  auto& pgrps = pipe_prep.pgrps;
   pgrps.resize(pgrp_descs.size());
   auto res = optixProgramGroupCreate(ctxt.optix_dc, pgrp_descs.data(),
     pgrp_descs.size(), &opt, log, &log_len,
@@ -301,8 +284,7 @@ PipelinePrep _create_pipe_prep(
   }
   OPTIX_ASSERT << res;
 
-  pipe_prep.pgrps = std::move(pgrps);
-  pipe_prep.sbt_size = sbt_size;
+  pipe_layout.sbt_size = sbt_size;
   return pipe_prep;
 }
 OptixPipeline _create_pipe(
@@ -349,91 +331,23 @@ void _set_pipe_stack_size(OptixPipeline pipe, const PipelineConfig& pipe_cfg) {
     DEFAULT_MAX_TRAV_GRAPH_DEPTH
   );
 }
-struct SbtPrep {
-  OptixShaderBindingTable sbt;
-  DeviceMemory sbt_devmem;
-};
-SbtPrep _create_sbt_prep(
-  const PipelineConfig& pipe_cfg,
-  const PipelinePrep& pipe_prep
-) {
-  auto i = 0;
-  OptixShaderBindingTable sbt {};
-  DeviceMemory sbt_devmem =
-    alloc_mem(pipe_prep.sbt_size, OPTIX_SBT_RECORD_ALIGNMENT);
-  const auto base = sbt_devmem.ptr;
-  uint8_t* sbt_hostbuf = new uint8_t[pipe_prep.sbt_size];
 
-#define L_FILL_SBT_SINGLE_ENTRY_AND_DATA(optix_name, prep_name, cfg_name)      \
-  if (pipe_cfg.cfg_name##_cfg.name) {                                          \
-    sbt.optix_name##Record = base + pipe_prep.sbt_##prep_name##_offset;        \
-    auto hbase = sbt_hostbuf + pipe_prep.sbt_##prep_name##_offset;             \
-    OPTIX_ASSERT << optixSbtRecordPackHeader(pipe_prep.pgrps[i], hbase);       \
-    std::memcpy(                                                               \
-      hbase + OPTIX_SBT_RECORD_HEADER_SIZE,                                    \
-      pipe_cfg.cfg_name##_cfg.data,                                            \
-      pipe_cfg.cfg_name##_cfg.size                                             \
-    );                                                                         \
-    ++i;                                                                       \
-  }
-
-#define L_FILL_SBT_MULTI_ENTRY(optix_name, prep_name)                          \
-  if (pipe_prep.nsbt_##prep_name) {                                            \
-    sbt.optix_name##RecordBase = base + pipe_prep.sbt_##prep_name##_offset;    \
-    sbt.optix_name##RecordStrideInBytes = pipe_prep.sbt_##prep_name##_stride;  \
-    sbt.optix_name##RecordCount = pipe_prep.nsbt_##prep_name;                  \
-  }
-
-#define L_FILL_SBT_MULTI_DATA(optix_name, prep_name, cfg_name)                 \
-  for (auto j = 0; j < pipe_prep.nsbt_##prep_name; ++j) {                      \
-    auto hbase = sbt_hostbuf + pipe_prep.sbt_##prep_name##_offset +            \
-      pipe_prep.sbt_##prep_name##_stride * j;                                  \
-    OPTIX_ASSERT << optixSbtRecordPackHeader(pipe_prep.pgrps[i], hbase);       \
-    auto& cfg = pipe_cfg.cfg_name##_cfgs.at(j);                                \
-    std::memcpy(hbase + OPTIX_SBT_RECORD_HEADER_SIZE, cfg.data, cfg.size);     \
-    ++i;                                                                       \
-  }
-
-  // ORDER IS IMPORTANT; DO NOT RESORT >>>
-  L_FILL_SBT_SINGLE_ENTRY_AND_DATA(raygen, raygen, rg);
-  L_FILL_SBT_SINGLE_ENTRY_AND_DATA(exception, except, ex);
-  L_FILL_SBT_MULTI_ENTRY(miss, miss);
-  L_FILL_SBT_MULTI_DATA(miss, miss, ms);
-  L_FILL_SBT_MULTI_ENTRY(hitgroup, hitgrp);
-  L_FILL_SBT_MULTI_DATA(hitgroup, hitgrp, hitgrp);
-  L_FILL_SBT_MULTI_ENTRY(callables, call);
-  L_FILL_SBT_MULTI_DATA(callables, call, dc);
-  L_FILL_SBT_MULTI_DATA(callables, call, cc);
-  // <<< ORDER IS IMPORTANT; DO NOT RESORT
-
-#undef L_FILL_SBT_SINGLE_ENTRY_AND_DATA
-#undef L_FILL_SBT_MULTI_ENTRY
-#undef L_FILL_SBT_MULTI_DATA
-
-  upload_mem(sbt_hostbuf, sbt_devmem, pipe_prep.sbt_size);
-  delete[] sbt_hostbuf;
-  liong::log::info("built sbt records");
-  return SbtPrep { sbt, sbt_devmem };
-}
 
 Pipeline create_pipe(const Context& ctxt, const PipelineConfig& pipe_cfg) {
   auto ptx = _read_ptx(pipe_cfg);
   auto mod = _create_mod(ctxt, pipe_cfg, ptx);
   auto pipe_prep = _create_pipe_prep(ctxt, pipe_cfg, mod);
   auto pipe = _create_pipe(ctxt, pipe_cfg, pipe_prep.pgrps);
-  auto sbt_prep = _create_sbt_prep(pipe_cfg, pipe_prep);
   std::stringstream ss;
   liong::log::info("created pipeline from module: ", pipe_cfg.mod_path);
   return Pipeline {
     mod,
     std::move(pipe_prep.pgrps),
     pipe,
-    sbt_prep.sbt,
-    std::move(sbt_prep.sbt_devmem)
+    std::move(pipe_prep.pipe_layout)
   };
 }
 void destroy_pipe(Pipeline& pipe) {
-  free_mem(pipe.sbt_devmem);
   if (pipe.pipe) { OPTIX_ASSERT << optixPipelineDestroy(pipe.pipe); }
   for (auto pgrp : pipe.pgrps) {
     if (pgrp) { OPTIX_ASSERT << optixProgramGroupDestroy(pgrp); }
@@ -441,6 +355,86 @@ void destroy_pipe(Pipeline& pipe) {
   if (pipe.mod) { OPTIX_ASSERT << optixModuleDestroy(pipe.mod); }
   pipe = {};
   liong::log::info("destroyed pipeline");
+}
+
+PipelineData create_pipe_data(const Pipeline& pipe) {
+  const auto& pipe_layout = pipe.pipe_layout;
+  auto i = 0;
+  OptixShaderBindingTable sbt {};
+  DeviceMemory sbt_devmem = alloc_mem(pipe.pipe_layout.sbt_size,
+    OPTIX_SBT_RECORD_ALIGNMENT);
+  const auto base = sbt_devmem.ptr;
+
+  // Just don't waste time guessing what does 'prep' means. This function
+  // originally return a structure called `PipelinePrep`, i.e., some prepared
+  // data that will be passed to another function during pipeline creation. Not
+  // changed hare because changing `prep_name` to `layout_name` will make some
+  // of the following lines too long to be stuffed in width of 80.
+  //
+  // I can use linebreaks, I know. Why I have been so resistant to create new
+  // lines while I'm writing this crazy shing up.
+#define L_FILL_SBT_SINGLE_ENTRY(optix_name, prep_name, cfg_name)      \
+  if (pipe_layout.sbt_##prep_name##_stride) {                                  \
+    sbt.optix_name##Record = base + pipe_layout.sbt_##prep_name##_offset;      \
+    ++i;                                                                       \
+  }
+#define L_FILL_SBT_MULTI_ENTRY(optix_name, prep_name)                          \
+  if (pipe_layout.nsbt_##prep_name) {                                          \
+    sbt.optix_name##RecordBase = base + pipe_layout.sbt_##prep_name##_offset;  \
+    sbt.optix_name##RecordStrideInBytes = pipe_layout.sbt_##prep_name##_stride;\
+    sbt.optix_name##RecordCount = pipe_layout.nsbt_##prep_name;                \
+  }
+
+  // ORDER IS IMPORTANT; DO NOT RESORT >>>
+  L_FILL_SBT_SINGLE_ENTRY(raygen, raygen, rg);
+  L_FILL_SBT_SINGLE_ENTRY(exception, except, ex);
+  L_FILL_SBT_MULTI_ENTRY(miss, miss);
+  L_FILL_SBT_MULTI_ENTRY(hitgroup, hitgrp);
+  L_FILL_SBT_MULTI_ENTRY(callables, call);
+  // <<< ORDER IS IMPORTANT; DO NOT RESORT
+
+  liong::log::info("created pipeline data");
+  return PipelineData { std::move(sbt), std::move(sbt_devmem) };
+}
+void destroy_pipe_data(PipelineData& pipe_data) {
+  free_mem(pipe_data.sbt_devmem);
+  pipe_data = {};
+  liong::log::info("destroyed pipeline data");
+}
+DeviceMemorySlice slice_pipe_data(
+  const Pipeline& pipe,
+  const PipelineData& pipe_data,
+  OptixProgramGroupKind kind,
+  uint32_t idx
+) {
+  const auto& pipe_layout = pipe.pipe_layout;
+  switch (kind) {
+  case OPTIX_PROGRAM_GROUP_KIND_RAYGEN:
+    return pipe_data.sbt_devmem.slice(
+      pipe_layout.sbt_raygen_offset,
+      pipe_layout.sbt_raygen_stride
+    );
+  case OPTIX_PROGRAM_GROUP_KIND_EXCEPTION:
+    return pipe_data.sbt_devmem.slice(
+      pipe_layout.sbt_except_offset,
+      pipe_layout.sbt_except_stride
+    );
+  case OPTIX_PROGRAM_GROUP_KIND_MISS:
+    return pipe_data.sbt_devmem.slice(
+      pipe_layout.sbt_miss_offset + pipe_layout.sbt_miss_stride * idx,
+      pipe_layout.sbt_miss_stride
+    );
+  case OPTIX_PROGRAM_GROUP_KIND_HITGROUP:
+    return pipe_data.sbt_devmem.slice(
+      pipe_layout.sbt_hitgrp_offset + pipe_layout.sbt_hitgrp_stride * idx,
+      pipe_layout.sbt_hitgrp_stride
+    );
+  case OPTIX_PROGRAM_GROUP_KIND_CALLABLES:
+    return pipe_data.sbt_devmem.slice(
+      pipe_layout.sbt_call_offset + pipe_layout.sbt_call_stride * idx,
+      pipe_layout.sbt_call_stride
+    );
+  }
 }
 
 
@@ -643,9 +637,11 @@ void cmd_download_mem(
 ) {
   CUDA_ASSERT << cuMemcpyDtoHAsync(dst, src.ptr, size, transact.stream);
 }
+
 void cmd_traverse(
   Transaction& transact,
   const Pipeline& pipe,
+  const PipelineData& pipe_data,
   const Framebuffer& framebuf,
   OptixTraversableHandle trav
 ) {
@@ -659,10 +655,54 @@ void cmd_traverse(
   DeviceMemory lparam_devmem = shadow_mem(lparam);
 
   OPTIX_ASSERT << optixLaunch(pipe.pipe, transact.stream, lparam_devmem.ptr,
-    lparam_devmem.size, &pipe.sbt, framebuf.width, framebuf.height, 1);
-  liong::log::info("initiated transaction for scene traversal");
+    lparam_devmem.size, &pipe_data.sbt, framebuf.width, framebuf.height, 1);
+  liong::log::info("scheduled transaction for scene traversal");
   manage_mem(transact, std::move(lparam_devmem));
 }
+
+
+void cmd_init_pipe_data(
+  Transaction& transact,
+  const Pipeline& pipe,
+  const PipelineData& pipe_data
+) {
+  const auto& pipe_layout = pipe.pipe_layout;
+  auto i = 0;
+  OptixShaderBindingTable sbt {};
+  DeviceMemory sbt_devmem = alloc_mem(pipe.pipe_layout.sbt_size,
+    OPTIX_SBT_RECORD_ALIGNMENT);
+  const auto base = sbt_devmem.ptr;
+  uint8_t* sbt_hostbuf = new uint8_t[pipe.pipe_layout.sbt_size] {};
+
+#define L_FILL_SBT_SINGLE_DATA(optix_name, prep_name, cfg_name)                \
+  if (pipe_layout.sbt_##prep_name##_stride) {                                  \
+    auto hbase = sbt_hostbuf + pipe_layout.sbt_##prep_name##_offset;           \
+    OPTIX_ASSERT << optixSbtRecordPackHeader(pipe.pgrps[i], hbase);            \
+    ++i;                                                                       \
+  }
+#define L_FILL_SBT_MULTI_DATA(optix_name, prep_name, cfg_name)                 \
+  for (auto j = 0; j < pipe_layout.nsbt_##prep_name; ++j) {                    \
+    auto hbase = sbt_hostbuf + pipe_layout.sbt_##prep_name##_offset +          \
+      pipe_layout.sbt_##prep_name##_stride * j;                                \
+    OPTIX_ASSERT << optixSbtRecordPackHeader(pipe.pgrps[i], hbase);            \
+    ++i;                                                                       \
+  }
+
+  // ORDER IS IMPORTANT; DO NOT RESORT >>>
+  L_FILL_SBT_SINGLE_DATA(raygen, raygen, rg);
+  L_FILL_SBT_SINGLE_DATA(exception, except, ex);
+  L_FILL_SBT_MULTI_DATA(miss, miss, ms);
+  L_FILL_SBT_MULTI_DATA(hitgroup, hitgrp, hitgrp);
+  L_FILL_SBT_MULTI_DATA(callables, call, dc);
+  L_FILL_SBT_MULTI_DATA(callables, call, cc);
+  // <<< ORDER IS IMPORTANT; DO NOT RESORT
+
+  upload_mem(sbt_hostbuf, sbt_devmem, pipe_layout.sbt_size);
+  delete[] sbt_hostbuf;
+
+  liong::log::info("scheduled pipeline data initialization");
+}
+
 
 void _cmd_build_as(
   Transaction& transact,

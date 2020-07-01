@@ -93,6 +93,18 @@ extern void destroy_pipe(Pipeline& pipe);
 
 
 
+// Create pipeline data. PIpeline data MUST be initialized before use.
+extern PipelineData create_pipe_data(const Pipeline& pipe);
+extern void destroy_pipe_data(PipelineData& pipe);
+extern DeviceMemorySlice slice_pipe_data(
+  const Pipeline& pipe,
+  const PipelineData& pipe_data,
+  OptixProgramGroupKind kind,
+  uint32_t idx
+);
+
+
+
 extern Framebuffer create_framebuf(uint32_t w, uint32_t h, uint32_t d = 1);
 extern void destroy_framebuf(Framebuffer& framebuf);
 // Take a snapshot of the framebuffer content and write it to a BMP file.
@@ -104,16 +116,23 @@ extern void snapshot_framebuf(const Framebuffer& framebuf, const char* path);
 
 
 
+// Create a mesh. The mesh data will be copied to the device side so it will be
+// safe to release after mesh creation.
 extern Mesh create_mesh(const MeshConfig& mesh_cfg, size_t mat_size = 0);
 extern void destroy_mesh(Mesh& mesh);
 
 
 
+// Create a scene object. The scene object is only traversable after being
+// built.
 extern SceneObject create_sobj();
 extern void destroy_sobj(SceneObject& sobj);
 
 
 
+// Create a scene from a set of `SceneObject`s. The scene is only traversable
+// after being built. The parameter `SceneObject`s MUST have been built before
+// becoming a child of a scene.
 extern Scene create_scene(const std::vector<SceneObject>& sobjs);
 extern void destroy_scene(Scene& scene);
 
@@ -174,6 +193,7 @@ extern void cmd_download_mem(
 extern void cmd_traverse(
   Transaction& transact,
   const Pipeline& pipe,
+  const PipelineData& pipe_data,
   const Framebuffer& framebuf,
   OptixTraversableHandle trav
 );
@@ -189,11 +209,23 @@ template<typename TTrav,
 void cmd_traverse(
   Transaction& transact,
   const Pipeline& pipe,
+  const PipelineData& pipe_data,
   const Framebuffer& framebuf,
   const TTrav& sobj
 ) {
-  cmd_traverse(transact, pipe, framebuf, sobj.inner->trav);
+  cmd_traverse(transact, pipe, pipe_data, framebuf, sobj.inner->trav);
 }
+// Initialize `PipelineData` layout. An uninitialized `PipelineData` cannot be
+// correctly bound by its user pipeline and scheduling pipeline execution with
+// invalid data will lead to undefined behavior.
+void cmd_init_pipe_data(
+  Transaction& transact,
+  const Pipeline& pipe,
+  const PipelineData& pipe_data
+);
+// Build a scene object. An unbuilt `SceneObject` cannot be correctly traversed
+// and scheduling traversal on invalid traversable object will lead to undefined
+// behavior.
 extern void cmd_build_sobj(
   Transaction& transact,
   const Context& ctxt,
@@ -201,13 +233,19 @@ extern void cmd_build_sobj(
   SceneObject& sobj,
   bool can_compact = true
 );
+// Build a scene. An unbuilt `Scene` cannot be correctly traversed and
+// scheduling traversal on invalid traversable object will lead to undefined
+// behavior.
 extern void cmd_build_scene(
   Transaction& transact,
   const Context& ctxt,
   Scene& scene,
   bool can_compact = true
 );
-// Compact traversable object memory.
+// Compact traversable object memory. Memory compaction will invalidate all
+// built references to the traversable object. The references MUST be re-built
+// with corresponding `cmd_build_*` commands for referencing objects to return
+// valid.
 extern void cmd_compact_mem(
   Transaction& transact,
   const Context& ctxt,

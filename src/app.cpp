@@ -34,20 +34,18 @@ PipelineConfig l_create_pipe_cfg() {
   pipe_cfg.nattr_wd = 2;
   pipe_cfg.trace_depth = 2;
   {
-    auto rg_cfg = PipelineStageConfig { "__raygen__", nullptr };
+    auto rg_cfg = PipelineStageConfig { "__raygen__" };
     pipe_cfg.rg_cfg = rg_cfg;
   }
   {
     auto hitgrp_cfg = PipelineHitGroupConfig {};
     hitgrp_cfg.ch_name = "__closesthit__";
     hitgrp_cfg.ah_name = "__anyhit__";
-    const static uint32_t color[] = { 0xFFFFFFFF };
-    hitgrp_cfg.data = color;
-    hitgrp_cfg.size = sizeof(uint32_t);
+    hitgrp_cfg.data_size = sizeof(uint32_t);
     pipe_cfg.hitgrp_cfgs.push_back(hitgrp_cfg);
   }
   {
-    auto ms_cfg = PipelineStageConfig { "__miss__", nullptr };
+    auto ms_cfg = PipelineStageConfig { "__miss__" };
     pipe_cfg.ms_cfgs.push_back(ms_cfg);
   }
   return pipe_cfg;
@@ -161,6 +159,7 @@ int main() {
 
   Context ctxt;
   Pipeline pipe;
+  PipelineData pipe_data;
   Framebuffer framebuf;
   Mesh mesh;
   SceneObject sobj;
@@ -174,17 +173,26 @@ int main() {
     mesh = create_mesh(mesh_cfg, 0);
     sobj = create_sobj();
     scene = create_scene({ sobj });
+    pipe_data = create_pipe_data(pipe);
     transact = create_transact();
 
     cmd_build_sobj(transact, ctxt, mesh, sobj);
     wait_transact(transact);
+
     cmd_compact_mem(transact, ctxt, sobj);
     wait_transact(transact);
+
     cmd_build_scene(transact, ctxt, scene);
     wait_transact(transact);
+
     cmd_compact_mem(transact, ctxt, scene);
     wait_transact(transact);
-    cmd_traverse(transact, pipe, framebuf, scene);
+
+    cmd_init_pipe_data(transact, pipe, pipe_data);
+    const uint32_t color[] = { 0xFFF0FFFF };
+    auto hitgrp_slice = slice_pipe_data(pipe, pipe_data, OPTIX_PROGRAM_GROUP_KIND_HITGROUP, 0);
+    cmd_upload_mem(transact, color, hitgrp_slice, sizeof(uint32_t));
+    cmd_traverse(transact, pipe, pipe_data, framebuf, scene);
     wait_transact(transact);
 
     snapshot_framebuf(framebuf, "./snapshot.bmp");
@@ -197,6 +205,7 @@ int main() {
     liong::log::error("application threw an illiterate exception");
   }
   destroy_transact(transact);
+  destroy_pipe_data(pipe_data);
   destroy_scene(scene);
   destroy_sobj(sobj);
   destroy_mesh(mesh);
