@@ -15,9 +15,8 @@ extern "C" __global__ void __anyhit__() {
 }
 
 extern "C" __global__ void __miss__() {
-  auto mat = GET_MATERIAL_PTR(MissMaterial);
   auto pColor = (uint32_t*)WORDS2PTR(optixGetPayload_0(), optixGetPayload_1());
-  *pColor = 0xFF000000;
+  *pColor = 0xFFAAAAFF;
 }
 
 extern "C" __global__ void __raygen__() {

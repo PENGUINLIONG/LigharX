@@ -189,9 +189,11 @@ int main() {
     wait_transact(transact);
 
     cmd_init_pipe_data(transact, pipe, pipe_data);
-    const uint32_t color[] = { 0xFFF0FFFF };
+    const uint32_t color[] = { 0xFFFF00FF };
     auto hitgrp_slice = slice_pipe_data(pipe, pipe_data, OPTIX_PROGRAM_GROUP_KIND_HITGROUP, 0);
     cmd_upload_mem(transact, color, hitgrp_slice, sizeof(uint32_t));
+    wait_transact(transact);
+
     cmd_traverse(transact, pipe, pipe_data, framebuf, scene);
     wait_transact(transact);
 

@@ -205,6 +205,7 @@ struct Scene {
 struct Transaction {
   CUstream stream;
   std::vector<DeviceMemory> mnged_devmems;
+  std::vector<void*> mnged_hostmems;
 };
 
 

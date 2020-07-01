@@ -273,7 +273,7 @@ PipelinePrep _create_pipe_prep(
   sbt_size += pipe_layout.sbt_call_stride * pipe_layout.nsbt_call;
   // <<< ORDER IS IMPORTANT; DO NOT RESORT
 
-  OptixProgramGroupOptions opt;
+  OptixProgramGroupOptions opt {};
   auto& pgrps = pipe_prep.pgrps;
   pgrps.resize(pgrp_descs.size());
   auto res = optixProgramGroupCreate(ctxt.optix_dc, pgrp_descs.data(),
@@ -411,28 +411,31 @@ DeviceMemorySlice slice_pipe_data(
   switch (kind) {
   case OPTIX_PROGRAM_GROUP_KIND_RAYGEN:
     return pipe_data.sbt_devmem.slice(
-      pipe_layout.sbt_raygen_offset,
-      pipe_layout.sbt_raygen_stride
+      pipe_layout.sbt_raygen_offset + OPTIX_SBT_RECORD_HEADER_SIZE,
+      pipe_layout.sbt_raygen_stride - OPTIX_SBT_RECORD_HEADER_SIZE
     );
   case OPTIX_PROGRAM_GROUP_KIND_EXCEPTION:
     return pipe_data.sbt_devmem.slice(
-      pipe_layout.sbt_except_offset,
-      pipe_layout.sbt_except_stride
+      pipe_layout.sbt_except_offset + OPTIX_SBT_RECORD_HEADER_SIZE,
+      pipe_layout.sbt_except_stride - OPTIX_SBT_RECORD_HEADER_SIZE
     );
   case OPTIX_PROGRAM_GROUP_KIND_MISS:
     return pipe_data.sbt_devmem.slice(
-      pipe_layout.sbt_miss_offset + pipe_layout.sbt_miss_stride * idx,
-      pipe_layout.sbt_miss_stride
+      pipe_layout.sbt_miss_offset + pipe_layout.sbt_miss_stride * idx +
+        OPTIX_SBT_RECORD_HEADER_SIZE,
+      pipe_layout.sbt_miss_stride - OPTIX_SBT_RECORD_HEADER_SIZE
     );
   case OPTIX_PROGRAM_GROUP_KIND_HITGROUP:
     return pipe_data.sbt_devmem.slice(
-      pipe_layout.sbt_hitgrp_offset + pipe_layout.sbt_hitgrp_stride * idx,
-      pipe_layout.sbt_hitgrp_stride
+      pipe_layout.sbt_hitgrp_offset + pipe_layout.sbt_hitgrp_stride * idx +
+        OPTIX_SBT_RECORD_HEADER_SIZE,
+      pipe_layout.sbt_hitgrp_stride - OPTIX_SBT_RECORD_HEADER_SIZE
     );
   case OPTIX_PROGRAM_GROUP_KIND_CALLABLES:
     return pipe_data.sbt_devmem.slice(
-      pipe_layout.sbt_call_offset + pipe_layout.sbt_call_stride * idx,
-      pipe_layout.sbt_call_stride
+      pipe_layout.sbt_call_offset + pipe_layout.sbt_call_stride * idx +
+        OPTIX_SBT_RECORD_HEADER_SIZE,
+      pipe_layout.sbt_call_stride - OPTIX_SBT_RECORD_HEADER_SIZE
     );
   }
 }
@@ -573,13 +576,17 @@ void destroy_scene(Scene& scene) {
 Transaction create_transact() {
   CUstream stream;
   CUDA_ASSERT << cuStreamCreate(&stream, CU_STREAM_DEFAULT);
-  return Transaction { stream };
+  return Transaction { stream, {}, {} };
 }
 void _free_managed_mem(Transaction& transact) {
   for (auto devmem : transact.mnged_devmems) {
     free_mem(devmem);
   }
+  for (auto hostmem : transact.mnged_hostmems) {
+    delete hostmem;
+  }
   transact.mnged_devmems.clear();
+  transact.mnged_hostmems.clear();
 }
 bool pool_transact(Transaction& transact) {
   auto res = cuStreamQuery(transact.stream);
@@ -604,8 +611,11 @@ void destroy_transact(Transaction& transact) {
 
 
 
-void manage_mem(Transaction& transact, DeviceMemory&& devmem) {
+void manage_devmem(Transaction& transact, DeviceMemory&& devmem) {
   transact.mnged_devmems.emplace_back(std::forward<DeviceMemory>(devmem));
+}
+void manage_hostmem(Transaction& transact, void* hostmem) {
+  transact.mnged_hostmems.emplace_back(hostmem);
 }
 void cmd_transfer_mem(
   Transaction& transact,
@@ -657,7 +667,7 @@ void cmd_traverse(
   OPTIX_ASSERT << optixLaunch(pipe.pipe, transact.stream, lparam_devmem.ptr,
     lparam_devmem.size, &pipe_data.sbt, framebuf.width, framebuf.height, 1);
   liong::log::info("scheduled transaction for scene traversal");
-  manage_mem(transact, std::move(lparam_devmem));
+  manage_devmem(transact, std::move(lparam_devmem));
 }
 
 
@@ -669,9 +679,7 @@ void cmd_init_pipe_data(
   const auto& pipe_layout = pipe.pipe_layout;
   auto i = 0;
   OptixShaderBindingTable sbt {};
-  DeviceMemory sbt_devmem = alloc_mem(pipe.pipe_layout.sbt_size,
-    OPTIX_SBT_RECORD_ALIGNMENT);
-  const auto base = sbt_devmem.ptr;
+  const auto base = pipe_data.sbt_devmem.ptr;
   uint8_t* sbt_hostbuf = new uint8_t[pipe.pipe_layout.sbt_size] {};
 
 #define L_FILL_SBT_SINGLE_DATA(optix_name, prep_name, cfg_name)                \
@@ -697,8 +705,9 @@ void cmd_init_pipe_data(
   L_FILL_SBT_MULTI_DATA(callables, call, cc);
   // <<< ORDER IS IMPORTANT; DO NOT RESORT
 
-  upload_mem(sbt_hostbuf, sbt_devmem, pipe_layout.sbt_size);
-  delete[] sbt_hostbuf;
+  cmd_upload_mem(transact, sbt_hostbuf, pipe_data.sbt_devmem,
+    pipe_layout.sbt_size);
+  manage_hostmem(transact, sbt_hostbuf);
 
   liong::log::info("scheduled pipeline data initialization");
 }
@@ -753,7 +762,7 @@ void _cmd_build_as(
     can_compact ? 2 : 1);
   as_fb->devmem = out_devmem;
   // Release temporary allocation automatically.
-  manage_mem(transact, std::move(temp_devmem));
+  manage_devmem(transact, std::move(temp_devmem));
   // Get AS build properties.
   cmd_download_mem(transact, build_prop_devmem, as_fb, build_prop_size);
 }
@@ -805,7 +814,7 @@ void cmd_build_scene(
 
   _cmd_build_as(transact, ctxt, build_in, scene.inner, can_compact);
   // TODO (penguinliong): Check for already allocated output memory.
-  manage_mem(transact, std::move(insts_devmem));
+  manage_devmem(transact, std::move(insts_devmem));
   liong::log::info("scheduled scene build");
 }
 
@@ -825,7 +834,7 @@ void cmd_compact_mem(
 
   OPTIX_ASSERT << optixAccelCompact(ctxt.optix_dc, transact.stream,
     uncompact_trav, as_fb->devmem.ptr, as_fb->devmem.size, &as_fb->trav);
-  manage_mem(transact, std::move(uncompact_devmem));
+  manage_devmem(transact, std::move(uncompact_devmem));
   liong::log::info("scheduled memory compaction");
 }
 

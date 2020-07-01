@@ -157,7 +157,11 @@ extern void destroy_transact(Transaction& trans);
 // Transfer ownership of a memory allocation to the given transaction. Any
 // managed allocation will be freed automatically when the trasaction is found
 // awaited.
-extern void manage_mem(Transaction& transact, DeviceMemory&& devmem);
+extern void manage_devmem(Transaction& transact, DeviceMemory&& devmem);
+// Transfer ownership of a memory allocation to the given transaction. Any
+// managed allocation will be freed automatically when the trasaction is found
+// awaited. It should be noted that the destructor is guaranteed not running.
+extern void manage_hostmem(Transaction& transact, void* hostmem);
 
 // The following functions are *command recording functions*. Command recording
 // functions record asynchronous procedure in the given transaction. The time
