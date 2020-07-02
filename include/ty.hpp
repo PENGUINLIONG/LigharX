@@ -7,6 +7,9 @@
 
 namespace liong {
 
+//
+// Core functionalities.
+//
 
 struct Context {
   CUdevice dev;
@@ -223,5 +226,32 @@ constexpr bool is_buffer_object_v = std::is_trivially_copyable_v<T> &
   !std::is_pointer_v<T>;
 
 }
+
+
+
+
+
+//
+// Extensions.
+//
+
+namespace ext {
+
+struct NaivePipelineConfig {
+  bool debug;
+  const char* mod_path;
+  unsigned trace_depth;
+  const char* rg_name;
+  const char* ms_name;
+  size_t env_size;
+  const char* ah_name;
+  const char* ch_name;
+  size_t mat_size;
+};
+
+
+
+}
+
 
 }

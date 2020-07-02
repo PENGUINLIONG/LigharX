@@ -1,5 +1,7 @@
 #include "core.hpp"
+#include "ext.hpp"
 #include "log.hpp"
+#include "x-mat.hpp"
 
 namespace {
 
@@ -22,33 +24,23 @@ void log_cb(liong::log::LogLevel lv, const std::string& msg) {
 
 using namespace liong;
 
-
-PipelineConfig l_create_pipe_cfg() {
+// Create pipeline config with scene object material (TMat) and environment
+// material (TEnv) which is used during ray miss.
+template<typename TMat, typename TEnv, size_t TTravDepth>
+Pipeline l_create_naive_pipe(const Context& ctxt) {
   // Note: For Visual Studio 2019 the default working directory is
   // `${CMAKE_BINARY_DIR}/bin`
-  auto pipe_cfg = PipelineConfig {};
-  pipe_cfg.debug = true;
-  pipe_cfg.mod_path = "../assets/demo.ptx";
-  pipe_cfg.launch_param_name = "cfg";
-  pipe_cfg.npayload_wd = 2;
-  pipe_cfg.nattr_wd = 2;
-  pipe_cfg.trace_depth = 2;
-  {
-    auto rg_cfg = PipelineStageConfig { "__raygen__" };
-    pipe_cfg.rg_cfg = rg_cfg;
-  }
-  {
-    auto hitgrp_cfg = PipelineHitGroupConfig {};
-    hitgrp_cfg.ch_name = "__closesthit__";
-    hitgrp_cfg.ah_name = "__anyhit__";
-    hitgrp_cfg.data_size = sizeof(uint32_t);
-    pipe_cfg.hitgrp_cfgs.push_back(hitgrp_cfg);
-  }
-  {
-    auto ms_cfg = PipelineStageConfig { "__miss__" };
-    pipe_cfg.ms_cfgs.push_back(ms_cfg);
-  }
-  return pipe_cfg;
+  ext::NaivePipelineConfig naive_pipe_cfg {};
+  naive_pipe_cfg.debug = true;
+  naive_pipe_cfg.mod_path = "../assets/demo.ptx";
+  naive_pipe_cfg.rg_name = "__raygen__";
+  naive_pipe_cfg.ms_name = "__miss__";
+  naive_pipe_cfg.ch_name = "__closesthit__";
+  naive_pipe_cfg.ah_name = "__anyhit__";
+  naive_pipe_cfg.env_size = sizeof(TEnv);
+  naive_pipe_cfg.mat_size = sizeof(TMat);
+  naive_pipe_cfg.trace_depth = TTravDepth;
+  return ext::create_native_pipe(ctxt, naive_pipe_cfg);
 }
 
 MeshConfig l_create_mesh_cfg() {
@@ -142,8 +134,6 @@ MeshConfig l_create_pln_cfg(const mat3x4& world2obj) {
 }
 
 
-
-
 int main() {
   liong::log::set_log_callback(log_cb);
 
@@ -153,8 +143,10 @@ int main() {
   initialize();
   liong::log::info("optix lab started");
 
+  liong::log::info(vec3{ 1.0, 1.0, 1.0 }.to_unorm_pack());
 
-  auto pipe_cfg = l_create_pipe_cfg();
+
+
   auto mesh_cfg = l_create_mesh_cfg();
 
   Context ctxt;
@@ -168,7 +160,7 @@ int main() {
 
   try {
     ctxt = create_ctxt();
-    pipe = create_pipe(ctxt, pipe_cfg);
+    pipe = l_create_naive_pipe<Material, Environment, 5>(ctxt);
     framebuf = create_framebuf(32, 32);
     mesh = create_mesh(mesh_cfg, 0);
     sobj = create_sobj();
@@ -189,9 +181,12 @@ int main() {
     wait_transact(transact);
 
     cmd_init_pipe_data(transact, pipe, pipe_data);
-    const uint32_t color[] = { 0xFFFF00FF };
-    auto hitgrp_slice = slice_pipe_data(pipe, pipe_data, OPTIX_PROGRAM_GROUP_KIND_HITGROUP, 0);
-    cmd_upload_mem(transact, color, hitgrp_slice, sizeof(uint32_t));
+    vec3 sky_color[1] = { vec3 { 0.5, 0.5, 0.5 } };
+    auto env_slice = ext::slice_naive_pipe_env(pipe, pipe_data);
+    cmd_upload_mem(transact, sky_color, env_slice, sizeof(vec3));
+    vec3 obj_color[1] = { vec3 { 1.0, 0.0, 1.0 } };
+    auto mat_slice = ext::slice_naive_pipe_mat(pipe, pipe_data, 0);
+    cmd_upload_mem(transact, obj_color, mat_slice, sizeof(vec3));
     wait_transact(transact);
 
     cmd_traverse(transact, pipe, pipe_data, framebuf, scene);
@@ -219,4 +214,3 @@ int main() {
 
   return 0;
 }
-

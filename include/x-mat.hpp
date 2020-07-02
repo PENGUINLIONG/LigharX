@@ -5,10 +5,10 @@
 
 namespace liong {
 
-struct HitMaterial {
+struct Material {
   vec3 obj_color;
 };
-struct MissMaterial {
+struct Environment {
   vec3 sky_color;
 };
 

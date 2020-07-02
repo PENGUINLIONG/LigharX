@@ -4,7 +4,9 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include "ty.hpp"
 #include "core.hpp"
+#include "ext.hpp"
 #include "log.hpp"
 #include "except.hpp"
 // !!! MUST ONLY DEFINE ONCE !!!
@@ -12,6 +14,9 @@
 
 namespace liong {
 
+//
+// Core functionalities.
+//
 
 void initialize() {
   CUDA_ASSERT << cuInit(0);
@@ -306,8 +311,7 @@ OptixPipeline _create_pipe(
   };
   OptixPipelineLinkOptions link_opt {
     pipe_cfg.trace_depth,
-    OPTIX_COMPILE_DEBUG_LEVEL_FULL,
-    0,
+    OPTIX_COMPILE_DEBUG_LEVEL_FULL
   };
   OptixPipeline pipe;
   auto res = optixPipelineCreate(ctxt.optix_dc, &pipe_opt, &link_opt,
@@ -838,5 +842,53 @@ void cmd_compact_mem(
   liong::log::info("scheduled memory compaction");
 }
 
+
+
+
+
+//
+// Extensions.
+//
+
+namespace ext {
+
+Pipeline create_native_pipe(
+  const Context& ctxt,
+  const NaivePipelineConfig& naive_pipe_cfg
+) {
+  PipelineConfig pipe_cfg{};
+  pipe_cfg.debug = naive_pipe_cfg.debug;
+  pipe_cfg.mod_path = naive_pipe_cfg.mod_path;
+  pipe_cfg.launch_param_name = "cfg";
+  pipe_cfg.npayload_wd = 2;
+  pipe_cfg.nattr_wd = 2;
+  pipe_cfg.trace_depth = naive_pipe_cfg.trace_depth;
+  pipe_cfg.rg_cfg = {
+    PipelineStageConfig {
+      naive_pipe_cfg.rg_name,
+      0
+  }
+  };
+  pipe_cfg.ms_cfgs = {
+    PipelineStageConfig {
+      naive_pipe_cfg.ms_name,
+      naive_pipe_cfg.env_size
+  }
+  };
+  pipe_cfg.hitgrp_cfgs = {
+    PipelineHitGroupConfig {
+      nullptr,
+      naive_pipe_cfg.ah_name,
+      naive_pipe_cfg.ch_name,
+      naive_pipe_cfg.mat_size
+  }
+  };
+  return create_pipe(ctxt, pipe_cfg);
+}
+
+
+
+
+} // namespace ext
 
 }

@@ -39,35 +39,37 @@ template<typename T, size_t TSize,
   typename _ = std::enable_if<std::is_arithmetic_v<T> && TSize <= 4>>
 struct Vector {
   T data[TSize];
-  Vector() : data {} {}
-  Vector(const Vector<T, TSize>& b) {
+  X Vector() : data {} {}
+  X Vector(const Vector<T, TSize>& b) {
     for (auto i = 0; i < TSize; ++i) {
-      data[i] = b[i];
+      data[i] = b.data[i];
     }
   }
-  Vector(Vector<T, TSize>&& b) {
+  X Vector(Vector<T, TSize>&& b) {
     for (auto i = 0; i < TSize; ++i) {
-      data[i] = b[i];
+      data[i] = b.data[i];
     }
   }
-  Vector(const std::initializer_list<T>& b) {
-    for (auto i = 0; i < TSize; ++i) {
-      data[i] = b[i];
+  X Vector(const std::initializer_list<T>& b) {
+    auto i = 0;
+    for (auto x : b) {
+      data[i] = x;
+      ++i;
     }
   }
-  Vector<T, TSize>& operator=(const Vector<T, TSize>& b) {
+  X Vector<T, TSize>& operator=(const Vector<T, TSize>& b) {
     for (auto i = 0; i < TSize; ++i) {
-      data[i] = b[i];
+      data[i] = b.data[i];
     }
   }
-  Vector<T, TSize>& operator=(Vector<T, TSize>&& b) {
+  X Vector<T, TSize>& operator=(Vector<T, TSize>&& b) {
     for (auto i = 0; i < TSize; ++i) {
-      data[i] = b[i];
+      data[i] = b.data[i];
     }
   }
 
 #define DEF_BIN_OP(x)                                                          \
-  constexpr Vector<T, TSize> operator x(const Vector<T, TSize>& rhs) const {   \
+  constexpr X Vector<T, TSize> operator x(const Vector<T, TSize>& rhs) const { \
     Vector<T, TSize> rv {};                                                    \
     for (auto i = 0; i < TSize; ++i) {                                         \
       rv.data[i] = data[i] x rhs.data[i];                                      \
@@ -77,28 +79,31 @@ struct Vector {
   DEF_BIN_OP(+);
   DEF_BIN_OP(-);
   DEF_BIN_OP(*);
-  DEF_BIN_OP(/ );
+  DEF_BIN_OP(/);
 #undef DEF_BIN_OP
 
   template<typename _ = std::enable_if_t<std::is_floating_point_v<T>>>
-  constexpr uint32_t to_unorm_pack() const {
+  constexpr X uint32_t to_unorm_pack() const {
     uint32_t rv {};
     for (auto i = 0; i < TSize; ++i) {
-      rv |= ((uint32_t)(data[i] * 255.999) << (2 * i));
+      rv |= ((uint32_t)(data[i] * 255.999) << (8 * i));
+    }
+    if (TSize < 4) {
+      rv |= 0xFF000000;
     }
     return rv;
   }
-  constexpr T dot(const Vector<T, TSize>& rhs) const {
+  constexpr X T dot(const Vector<T, TSize>& rhs) const {
     T rv {};
     for (auto i = 0; i < TSize; ++i) {
       rv += data[i] * rhs.data[i];
     }
     return rv;
   }
-  constexpr T mag() const {
+  constexpr X T mag() const {
     return (T)std::sqrt(dot(*this));
   }
-  constexpr Vector<T, TSize> normalize() const {
+  constexpr X Vector<T, TSize> normalize() const {
     Vector<T, TSize> rv;
     auto m = mag();
     for (auto i = 0; i < TSize; ++i) {
