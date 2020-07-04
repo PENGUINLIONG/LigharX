@@ -887,8 +887,6 @@ Pipeline create_native_pipe(
 }
 
 
-
-
 } // namespace ext
 
 }

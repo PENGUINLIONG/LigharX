@@ -39,14 +39,14 @@ extern void upload_mem(
 // entire copy of content of `src`.
 template<typename TCont, typename TElem = typename TCont::value_type,
   typename _ = std::enable_if<type_traits::is_buffer_container_v<TCont>>>
-void upload_mem(const TCont& src, const DeviceMemorySlice& dst) {
+  void upload_mem(const TCont& src, const DeviceMemorySlice& dst) {
   upload_mem(src.data(), dst, sizeof(TElem) * src.size());
 }
 // Upload structured data to CUDA device memory.`dst` MUST be able to contain an
 // entire copy of content of `src`.
 template<typename T,
   typename _ = std::enable_if<type_traits::is_buffer_object_v<T>>>
-void upload_mem(const T& src, const DeviceMemorySlice& dst) {
+  void upload_mem(const T& src, const DeviceMemorySlice& dst) {
   upload_mem(&src, dst, sizeof(T));
 }
 // Download data from CUDA device memory. If the `size` of `dst` is shoter than
@@ -56,14 +56,14 @@ extern void download_mem(const DeviceMemorySlice& src, void* dst, size_t size);
 // smaller than the `src`, a truncated copy of `src` is downloaded.
 template<typename TCont, typename TElem = typename TCont::value_type,
   typename _ = std::enable_if<type_traits::is_buffer_container_v<TCont>>>
-void download_mem(const DeviceMemorySlice& src, TCont& dst) {
+  void download_mem(const DeviceMemorySlice& src, TCont& dst) {
   download_mem(src, dst.data(), sizeof(TElem) * dst.size());
 }
 // Download data from CUDA device memory. If the size of `dst` if smaller than
 // the `src`, a truncated copy of `src` is downloaded.
 template<typename T,
   typename _ = std::enable_if<type_traits::is_buffer_object_v<T>>>
-void download_mem(const DeviceMemorySlice& src, T& dst) {
+  void download_mem(const DeviceMemorySlice& src, T& dst) {
   download_mem(src, &dst, sizeof(T));
 }
 // Copy a slice of host memory to a new memory allocation on a device. The
@@ -73,12 +73,12 @@ extern DeviceMemory shadow_mem(const void* buf, size_t size, size_t align);
 // can be accessed globally by multiple streams.
 template<typename TCont, typename TElem = typename TCont::value_type,
   typename _ = std::enable_if<type_traits::is_buffer_container_v<TCont>>>
-DeviceMemory shadow_mem(const TCont& buf, size_t align = 1) {
+  DeviceMemory shadow_mem(const TCont& buf, size_t align = 1) {
   return shadow_mem(buf.data(), sizeof(TElem) * buf.size(), align);
 }
 template<typename T,
   typename _ = std::enable_if<type_traits::is_buffer_object_v<T>>>
-DeviceMemory shadow_mem(const T& buf, size_t align = 1) {
+  DeviceMemory shadow_mem(const T& buf, size_t align = 1) {
   return shadow_mem(&buf, sizeof(T), align);
 }
 
@@ -265,6 +265,19 @@ void cmd_compact_mem(
   const TTrav& x
 ) {
   cmd_compact_mem(transact, ctxt, x.inner);
+}
+template<typename TTrav,
+  typename _ = std::enable_if_t<std::is_same_v<
+  decltype(std::remove_pointer_t<typename decltype(TTrav::inner)>::trav),
+  OptixTraversableHandle>>>
+void cmd_compact_mems(
+  Transaction& transact,
+  const Context& ctxt,
+  const std::vector<TTrav>& xs
+) {
+  for (const auto& x : xs) {
+    cmd_compact_mem(transact, ctxt, x.inner);
+  }
 }
 
 }

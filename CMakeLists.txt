@@ -14,15 +14,18 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PROJECT_SOURCE_DIR}/cmake")
 
 find_package(CUDA REQUIRED)
 find_package(OptiX REQUIRED VERSION 7.0)
+find_package(Assimp REQUIRED)
 
 # Build the OptixLab.
 include_directories(
     "${PROJECT_SOURCE_DIR}/include"
     ${OptiX_INCLUDE}
     ${CUDA_TOOLKIT_INCLUDE}
+    ${ASSIMP_INCLUDE_DIR}
 )
 file(GLOB SRCS "${PROJECT_SOURCE_DIR}/src/*")
-add_executable(OptixLab ${SRCS}  "include/ty.hpp")
+file(GLOB INCS "${PROJECT_SOURCE_DIR}/include/*")
+add_executable(OptixLab ${SRCS} ${INCS})
 
 # Compile OptixLabShaders.
 file(GLOB SHADER_SRCS "${PROJECT_SOURCE_DIR}/assets/*.cu")
@@ -48,4 +51,5 @@ target_link_libraries(
     OptixLab
     ${CUDA_LIBRARIES}
     ${CUDA_CUDA_LIBRARY}
+    ${ASSIMP_LIBRARY}
 )
