@@ -10,10 +10,13 @@ namespace liong {
 
 namespace ext {
 
+// Read PTX representation from a single file specified in `pipe_cfg`.
+std::vector<char> read_ptx(const char* ptx_path);
+
 // Create a naive pipeline that is enough to do simple ray tracing tasks. A
 // naive pipline is a predefined cofiguration with `lauch_param_name` defaulted
 // to `cfg`, `npayload_wd` and `nattr_wd` defaulted to 2 (to carry a pointer).
-Pipeline create_native_pipe(
+Pipeline create_naive_pipe(
   const Context& ctxt,
   const NaivePipelineConfig& naive_pipe_cfg
 );
@@ -51,50 +54,7 @@ inline void destroy_meshes(std::vector<Mesh>& meshes) {
   }
   meshes.clear();
 }
-std::vector<Mesh> import_meshes_from_file(const char* path) {
-  const aiScene* raw_scene = aiImportFile(
-    path,
-    aiProcess_Triangulate |
-    aiProcess_JoinIdenticalVertices |
-    aiProcess_SortByPType
-  );
-  ASSERT << raw_scene
-    << "cannot import scene";
-  ASSERT << (raw_scene->mNumMeshes > 0)
-    << "imported scene has no mesh";
-
-  std::vector<Mesh> mesh;
-  mesh.reserve(raw_scene->mNumMeshes);
-
-  for (auto i = 0; i < raw_scene->mNumMeshes; ++i) {
-    const auto& raw_mesh = *raw_scene->mMeshes[i];
-    MeshConfig mesh_cfg {};
-
-    mesh_cfg.vert_buf = raw_mesh.mVertices;
-    mesh_cfg.nvert = raw_mesh.mNumVertices;
-    mesh_cfg.vert_stride =
-      sizeof(std::remove_pointer_t<decltype(raw_mesh.mVertices)>);
-    mesh_cfg.vert_fmt = OPTIX_VERTEX_FORMAT_FLOAT3;
-
-    std::vector<uint32_t> idx_buf;
-    idx_buf.resize(raw_mesh.mNumFaces * 3); // All faces has been triangulated.
-    for (auto j = 0; j < raw_mesh.mNumFaces; ++j) {
-      const auto& face = raw_mesh.mFaces[j];
-      for (auto k = 0; k < face.mNumIndices; ++k) {
-        idx_buf[j * 3 + k] = face.mIndices[k];
-      }
-    }
-    mesh_cfg.idx_buf = idx_buf.data();
-    mesh_cfg.ntri = raw_mesh.mNumFaces;
-    mesh_cfg.tri_stride = 3 * sizeof(uint32_t);
-    mesh_cfg.idx_fmt = OPTIX_INDICES_FORMAT_UNSIGNED_INT3;
-
-    // DO NOT REPLACE WITH `create_meshes`; NOTICE THE LIFETIME OF `idx_buf`!
-    mesh.emplace_back(create_mesh(mesh_cfg));
-  }
-  aiReleaseImport(raw_scene);
-  return mesh;
-}
+std::vector<Mesh> import_meshes_from_file(const char* path);
 
 
 
@@ -130,9 +90,6 @@ inline void cmd_build_sobjs(
     cmd_build_sobj(transact, ctxt, meshes[i], sobjs[i], can_compact);
   }
 }
-
-
-
 
 
 }

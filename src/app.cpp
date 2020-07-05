@@ -27,12 +27,16 @@ using namespace liong;
 // Create pipeline config with scene object material (TMat) and environment
 // material (TEnv) which is used during ray miss.
 template<typename TMat, typename TEnv, size_t TTravDepth>
-Pipeline l_create_naive_pipe(const Context& ctxt) {
+Pipeline l_create_naive_pipe(
+  const Context& ctxt,
+  const std::vector<char>& ptx
+) {
   // Note: For Visual Studio 2019 the default working directory is
   // `${CMAKE_BINARY_DIR}/bin`
   ext::NaivePipelineConfig naive_pipe_cfg {};
   naive_pipe_cfg.debug = true;
-  naive_pipe_cfg.mod_path = "../assets/demo.ptx";
+  naive_pipe_cfg.ptx_data = ptx.data();
+  naive_pipe_cfg.ptx_size = ptx.size();
   naive_pipe_cfg.rg_name = "__raygen__";
   naive_pipe_cfg.ms_name = "__miss__";
   naive_pipe_cfg.ch_name = "__closesthit__";
@@ -40,7 +44,7 @@ Pipeline l_create_naive_pipe(const Context& ctxt) {
   naive_pipe_cfg.env_size = sizeof(TEnv);
   naive_pipe_cfg.mat_size = sizeof(TMat);
   naive_pipe_cfg.trace_depth = TTravDepth;
-  return ext::create_native_pipe(ctxt, naive_pipe_cfg);
+  return ext::create_naive_pipe(ctxt, naive_pipe_cfg);
 }
 
 int main() {
@@ -65,7 +69,10 @@ int main() {
 
   try {
     ctxt = create_ctxt();
-    pipe = l_create_naive_pipe<Material, Environment, 5>(ctxt);
+    {
+      auto ptx = ext::read_ptx("../assets/demo.ptx");
+      pipe = l_create_naive_pipe<Material, Environment, 5>(ctxt, ptx);
+    }
     framebuf = create_framebuf(32, 32);
     meshes = ext::import_meshes_from_file("./untitled.obj");
     sobjs = ext::create_sobjs(meshes.size());

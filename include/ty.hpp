@@ -79,9 +79,10 @@ struct PipelineConfig {
   // be provided if enabled.
   bool debug;
 
-  // Path to the pipeline module containing all stages and callables of the
-  // pipeline.
-  const char* mod_path;
+  // Pipeline module containing all stages and callables of the pipeline.
+  const char* ptx_data;
+  size_t ptx_size;
+
   // Launch parameter variable name. The parameter variable will be ignored if
   // this field is empty.
   const char* launch_param_name;
@@ -239,7 +240,8 @@ namespace ext {
 
 struct NaivePipelineConfig {
   bool debug;
-  const char* mod_path;
+  const char* ptx_data;
+  size_t ptx_size;
   unsigned trace_depth;
   const char* rg_name;
   const char* ms_name;

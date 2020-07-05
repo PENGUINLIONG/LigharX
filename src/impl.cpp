@@ -128,23 +128,9 @@ DeviceMemory shadow_mem(const void* buf, size_t size, size_t align) {
 }
 
 
-// Read PTX representation from a single file specified in `pipe_cfg`.
-std::vector<char> _read_ptx(const PipelineConfig& pipe_cfg) {
-  std::fstream fs(pipe_cfg.mod_path, std::ios::in | std::ios::ate);
-  ASSERT << fs.is_open()
-    << "cannot open ptx file";
-  size_t n = fs.tellg();
-  fs.seekg(0, std::ios::beg);
-  std::vector<char> buf;
-  buf.resize(n);
-  fs.read(buf.data(), n);
-  fs.close();
-  return buf;
-}
 OptixModule _create_mod(
   const Context& ctxt,
-  const PipelineConfig& pipe_cfg,
-  const std::vector<char>& ptx
+  const PipelineConfig& pipe_cfg
 ) {
   const size_t LOG_LEN = 400;
   char log[LOG_LEN];
@@ -168,7 +154,7 @@ OptixModule _create_mod(
   };
   OptixModule mod;
   auto res = optixModuleCreateFromPTX(ctxt.optix_dc, &mod_opt, &pipe_opt,
-    ptx.data(), ptx.size(), log, &log_len, &mod);
+    (const char*)pipe_cfg.ptx_data, pipe_cfg.ptx_size, log, &log_len, &mod);
   if (log_len != 0 && res != OPTIX_SUCCESS) {
     liong::log::warn(log);
   }
@@ -338,12 +324,11 @@ void _set_pipe_stack_size(OptixPipeline pipe, const PipelineConfig& pipe_cfg) {
 
 
 Pipeline create_pipe(const Context& ctxt, const PipelineConfig& pipe_cfg) {
-  auto ptx = _read_ptx(pipe_cfg);
-  auto mod = _create_mod(ctxt, pipe_cfg, ptx);
+  auto mod = _create_mod(ctxt, pipe_cfg);
   auto pipe_prep = _create_pipe_prep(ctxt, pipe_cfg, mod);
   auto pipe = _create_pipe(ctxt, pipe_cfg, pipe_prep.pgrps);
   std::stringstream ss;
-  liong::log::info("created pipeline from module: ", pipe_cfg.mod_path);
+  liong::log::info("created pipeline from module");
   return Pipeline {
     mod,
     std::move(pipe_prep.pgrps),
@@ -852,13 +837,27 @@ void cmd_compact_mem(
 
 namespace ext {
 
-Pipeline create_native_pipe(
+std::vector<char> read_ptx(const char* ptx_path) {
+  std::fstream fs(ptx_path, std::ios::in | std::ios::ate);
+  ASSERT << fs.is_open()
+    << "cannot open ptx file";
+  size_t n = fs.tellg();
+  fs.seekg(0, std::ios::beg);
+  std::vector<char> buf;
+  buf.resize(n);
+  fs.read(buf.data(), n);
+  fs.close();
+  return buf;
+}
+
+Pipeline create_naive_pipe(
   const Context& ctxt,
   const NaivePipelineConfig& naive_pipe_cfg
 ) {
   PipelineConfig pipe_cfg{};
   pipe_cfg.debug = naive_pipe_cfg.debug;
-  pipe_cfg.mod_path = naive_pipe_cfg.mod_path;
+  pipe_cfg.ptx_data = naive_pipe_cfg.ptx_data;
+  pipe_cfg.ptx_size = naive_pipe_cfg.ptx_size;
   pipe_cfg.launch_param_name = "cfg";
   pipe_cfg.npayload_wd = 2;
   pipe_cfg.nattr_wd = 2;
@@ -884,6 +883,52 @@ Pipeline create_native_pipe(
   }
   };
   return create_pipe(ctxt, pipe_cfg);
+}
+
+
+std::vector<Mesh> import_meshes_from_file(const char* path) {
+  const aiScene* raw_scene = aiImportFile(
+    path,
+    aiProcess_Triangulate |
+    aiProcess_JoinIdenticalVertices |
+    aiProcess_SortByPType
+  );
+  ASSERT << raw_scene
+    << "cannot import scene";
+  ASSERT << (raw_scene->mNumMeshes > 0)
+    << "imported scene has no mesh";
+
+  std::vector<Mesh> mesh;
+  mesh.reserve(raw_scene->mNumMeshes);
+
+  for (auto i = 0; i < raw_scene->mNumMeshes; ++i) {
+    const auto& raw_mesh = *raw_scene->mMeshes[i];
+    MeshConfig mesh_cfg {};
+
+    mesh_cfg.vert_buf = raw_mesh.mVertices;
+    mesh_cfg.nvert = raw_mesh.mNumVertices;
+    mesh_cfg.vert_stride =
+      sizeof(std::remove_pointer_t<decltype(raw_mesh.mVertices)>);
+    mesh_cfg.vert_fmt = OPTIX_VERTEX_FORMAT_FLOAT3;
+
+    std::vector<uint32_t> idx_buf;
+    idx_buf.resize(raw_mesh.mNumFaces * 3); // All faces has been triangulated.
+    for (auto j = 0; j < raw_mesh.mNumFaces; ++j) {
+      const auto& face = raw_mesh.mFaces[j];
+      for (auto k = 0; k < face.mNumIndices; ++k) {
+        idx_buf[j * 3 + k] = face.mIndices[k];
+      }
+    }
+    mesh_cfg.idx_buf = idx_buf.data();
+    mesh_cfg.ntri = raw_mesh.mNumFaces;
+    mesh_cfg.tri_stride = 3 * sizeof(uint32_t);
+    mesh_cfg.idx_fmt = OPTIX_INDICES_FORMAT_UNSIGNED_INT3;
+
+    // DO NOT REPLACE WITH `create_meshes`; NOTICE THE LIFETIME OF `idx_buf`!
+    mesh.emplace_back(create_mesh(mesh_cfg));
+  }
+  aiReleaseImport(raw_scene);
+  return mesh;
 }
 
 
