@@ -815,6 +815,9 @@ void cmd_compact_mem(
 ) {
   ASSERT << (as_fb->compact_size != 0)
     << "not a compactable as";
+  if (as_fb->compact_size >= as_fb->devmem.size) {
+    liong::log::info("ignored compaction since memory use will not decrease");
+  }
   OptixTraversableHandle uncompact_trav = std::exchange(as_fb->trav, {});
   DeviceMemory uncompact_devmem = std::exchange(
     as_fb->devmem,
@@ -824,7 +827,8 @@ void cmd_compact_mem(
   OPTIX_ASSERT << optixAccelCompact(ctxt.optix_dc, transact.stream,
     uncompact_trav, as_fb->devmem.ptr, as_fb->devmem.size, &as_fb->trav);
   manage_devmem(transact, std::move(uncompact_devmem));
-  liong::log::info("scheduled memory compaction");
+  liong::log::info("scheduled memory compaction (", uncompact_devmem.size,
+    "bytes -> ", as_fb->compact_size, "bytes)");
 }
 
 
