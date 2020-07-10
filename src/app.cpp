@@ -70,7 +70,7 @@ int main() {
   try {
     ctxt = create_ctxt();
     {
-      auto ptx = ext::read_ptx("../assets/demo.ptx");
+      auto ptx = ext::read_ptx("../assets/cuda_compile_ptx_1_generated_demo.cu.ptx");
       pipe = l_create_naive_pipe<Material, Environment, 5>(ctxt, ptx);
     }
     framebuf = create_framebuf(32, 32);
