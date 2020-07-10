@@ -11,6 +11,9 @@
 #include <optix_device.h>
 // Cross-platform compilable function.
 #define X __device__
+#define LAUNCH_CFG extern "C" __constant__
+#define SHADER_MAIN extern "C" __global__ 
+#define SHADER_FN __forceinline__ __device__
 #else
 #include <cuda_runtime_api.h>
 #include <optix.h>

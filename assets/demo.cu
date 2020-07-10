@@ -3,24 +3,30 @@
 
 namespace liong {
 
-extern "C" __constant__ LaunchConfig cfg;
 
-extern "C" __global__ void __closesthit__() {
+LAUNCH_CFG
+LaunchConfig cfg;
+
+SHADER_MAIN
+void __closesthit__() {
   const auto& mat = *(const Material*)optixGetSbtDataPointer();
   auto pColor = (vec3*)WORDS2PTR(optixGetPayload_0(), optixGetPayload_1());
   *pColor = mat.obj_color;
 }
 
-extern "C" __global__ void __anyhit__() {
+SHADER_MAIN
+void __anyhit__() {
 }
 
-extern "C" __global__ void __miss__() {
+SHADER_MAIN
+void __miss__() {
   const auto& env = *(const Environment*)optixGetSbtDataPointer();
   auto pColor = (vec3*)WORDS2PTR(optixGetPayload_0(), optixGetPayload_1());
   *pColor = env.sky_color;
 }
 
-extern "C" __global__ void __raygen__() {
+SHADER_MAIN
+void __raygen__() {
   auto x = optixGetLaunchIndex().x;
   auto y = optixGetLaunchIndex().y;
   auto u = ((float)(x * 2 + 1) / cfg.width - 1);
