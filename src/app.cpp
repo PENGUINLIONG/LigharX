@@ -56,7 +56,7 @@ int main() {
   initialize();
   liong::log::info("optix lab started");
 
-  liong::log::info(vec3{ 1.0, 1.0, 1.0 }.to_unorm_pack());
+  liong::log::info(float3 { 1.0, 1.0, 1.0 });
 
   Context ctxt;
   Pipeline pipe;
@@ -93,12 +93,12 @@ int main() {
     wait_transact(transact);
 
     cmd_init_pipe_data(transact, pipe, pipe_data);
-    vec3 sky_color[1] = { vec3 { 0.5, 0.5, 0.5 } };
+    float3 sky_color[1] = { float3 { 0.5, 0.5, 0.5 } };
     auto env_slice = ext::slice_naive_pipe_env(pipe, pipe_data);
-    cmd_upload_mem(transact, sky_color, env_slice, sizeof(vec3));
-    vec3 obj_color[1] = { vec3 { 1.0, 0.0, 1.0 } };
+    cmd_upload_mem(transact, sky_color, env_slice, sizeof(float3));
+    float3 obj_color[1] = { float3 { 1.0, 0.0, 1.0 } };
     auto mat_slice = ext::slice_naive_pipe_mat(pipe, pipe_data, 0);
-    cmd_upload_mem(transact, obj_color, mat_slice, sizeof(vec3));
+    cmd_upload_mem(transact, obj_color, mat_slice, sizeof(float3));
     wait_transact(transact);
 
     cmd_traverse(transact, pipe, pipe_data, framebuf, scene);

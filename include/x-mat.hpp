@@ -6,10 +6,10 @@
 namespace liong {
 
 struct Material {
-  vec3 obj_color;
+  float3 obj_color;
 };
 struct Environment {
-  vec3 sky_color;
+  float3 sky_color;
 };
 
 }

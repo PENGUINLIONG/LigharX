@@ -1,156 +1,85 @@
 #pragma once
 // Host/device cross-end definition header.
 // @PENGUINLIONG
-
 #include <cstdint>
 #include <cmath>
-#include <initializer_list>
 #include <optix_stubs.h>
 #ifdef __CUDACC__
-#include <cuda.h>
 #include <optix_device.h>
 // Cross-platform compilable function.
 #define X __device__
+#else
+#include <optix.h>
+#define X
+#endif // __CUDACC__
+#include "vector_math.h"
+
+// CUDA-only utility macros.
+#ifdef __CUDACC__
+
 #define LAUNCH_CFG extern "C" __constant__
 #define SHADER_MAIN extern "C" __global__ 
 #define SHADER_FN __forceinline__ __device__
-#else
-#include <cuda_runtime_api.h>
-#include <optix.h>
-#define X
-#endif
-
-namespace liong {
-
-// TODO: (penguinliong) Support multiple types of framebuffer.
-struct LaunchConfig {
-  uint32_t width;
-  uint32_t height;
-  uint32_t depth;
-  OptixTraversableHandle trav;
-  uint32_t* framebuf;
-};
 
 #define PTR2WORDS(ptr) {                                                       \
   (uint32_t)(((uint64_t)(ptr)) >> 32),                                         \
   (uint32_t)(((uint64_t)(ptr)) & 0xFFFFFFFF)                                   \
 }
-#define WORDS2PTR(w1, w0) ((const void*)((((uint64_t)(w1)) << 32) | ((uint64_t)(w0))))
+#define WORDS2PTR(w1, w0) \
+((const void*)((((uint64_t)(w1)) << 32) | ((uint64_t)(w0))))
+
+#endif // __CUDACC__
 
 
-template<typename T, size_t TSize,
-  typename _ = std::enable_if<std::is_arithmetic_v<T> && TSize <= 4>>
-struct Vector {
-  T data[TSize];
-  X Vector() : data {} {}
-  X Vector(const Vector<T, TSize>& b) {
-    for (auto i = 0; i < TSize; ++i) {
-      data[i] = b.data[i];
-    }
-  }
-  X Vector(Vector<T, TSize>&& b) {
-    for (auto i = 0; i < TSize; ++i) {
-      data[i] = b.data[i];
-    }
-  }
-  X Vector(const std::initializer_list<T>& b) {
-    auto i = 0;
-    for (auto x : b) {
-      data[i] = x;
-      ++i;
-    }
-  }
-  X Vector<T, TSize>& operator=(const Vector<T, TSize>& b) {
-    for (auto i = 0; i < TSize; ++i) {
-      data[i] = b.data[i];
-    }
-  }
-  X Vector<T, TSize>& operator=(Vector<T, TSize>&& b) {
-    for (auto i = 0; i < TSize; ++i) {
-      data[i] = b.data[i];
-    }
-  }
+namespace liong {
 
-#define DEF_BIN_OP(x)                                                          \
-  constexpr X Vector<T, TSize> operator x(const Vector<T, TSize>& rhs) const { \
-    Vector<T, TSize> rv {};                                                    \
-    for (auto i = 0; i < TSize; ++i) {                                         \
-      rv.data[i] = data[i] x rhs.data[i];                                      \
-    }                                                                          \
-    return rv;                                                                 \
-  }
-  DEF_BIN_OP(+);
-  DEF_BIN_OP(-);
-  DEF_BIN_OP(*);
-  DEF_BIN_OP(/);
-#undef DEF_BIN_OP
+constexpr float4 make_pt(float x, float y, float z) {
+  return float4{ x, y, z, 1.0f };
+}
+constexpr float4 make_vec(float x, float y, float z) {
+  return float4{ x, y, z, 0.0f };
+}
+constexpr uint32_t pack_unorm4(float4 x) {
+  return ((uint32_t)(x.x * 255)) |
+    ((uint32_t)(x.y * 255) << 8) |
+    ((uint32_t)(x.z * 255) << 16) |
+    ((uint32_t)(x.w * 255) << 24);
+}
+constexpr uint32_t pack_unorm3(float3 x) {
+  return ((uint32_t)(x.x * 255)) |
+    ((uint32_t)(x.y * 255) << 8) |
+    ((uint32_t)(x.z * 255) << 16);
+}
 
-  template<typename _ = std::enable_if_t<std::is_floating_point_v<T>>>
-  constexpr X uint32_t to_unorm_pack() const {
-    uint32_t rv {};
-    for (auto i = 0; i < TSize; ++i) {
-      rv |= ((uint32_t)(data[i] * 255.999) << (8 * i));
-    }
-    if (TSize < 4) {
-      rv |= 0xFF000000;
-    }
-    return rv;
-  }
-  constexpr X T dot(const Vector<T, TSize>& rhs) const {
-    T rv {};
-    for (auto i = 0; i < TSize; ++i) {
-      rv += data[i] * rhs.data[i];
-    }
-    return rv;
-  }
-  constexpr X T mag() const {
-    return (T)std::sqrt(dot(*this));
-  }
-  constexpr X Vector<T, TSize> normalize() const {
-    Vector<T, TSize> rv;
-    auto m = mag();
-    for (auto i = 0; i < TSize; ++i) {
-      rv[i] = data[i] / m;
-    }
-    return rv;
-  }
-
-};
-
-using vec2 = Vector<float, 2>;
-using vec3 = Vector<float, 3>;
-using vec4 = Vector<float, 4>;
-using ivec2 = Vector<int32_t, 2>;
-using ivec3 = Vector<int32_t, 3>;
-using ivec4 = Vector<int32_t, 4>;
-
-
-// An 3x4 matrix transform.
-template<typename T,
-  typename _ = std::enable_if_t<std::is_floating_point_v<T>>>
-  struct Transform {
-  T mat[12];
+// An 3x4 (float32) matrix transform.
+struct Transform {
+  union {
+    float mat[12];
+    float4 rows[3];
+  };
 
   X Transform() : mat { 1,0,0,0, 0,1,0,0, 0,0,1,0 } {}
-  X Transform(T a, T b, T c, T d,
-    T e, T f, T g, T h,
-    T i, T j, T k, T l) : mat { a,b,c,d,e,f,g,h,i,j,k,l } {}
-  X Transform(T mat[12]) { mat = mat; }
+  X Transform(float4 r1, float4 r2, float4 r3) : rows{ r1, r2, r3 } {}
+  X Transform(float a, float b, float c, float d,
+    float e, float f, float g, float h,
+    float i, float j, float k, float l) : mat { a,b,c,d,e,f,g,h,i,j,k,l } {}
+  X Transform(float mat[12]) { mat = mat; }
   X Transform(const Transform&) = default;
   X Transform(Transform&&) = default;
   X Transform& operator=(const Transform&) = default;
   X Transform& operator=(Transform&&) = default;
 
-  template<typename T2, size_t TSize,
-    typename _ = std::enable_if_t<std::is_floating_point_v<T2> && TSize <= 4>>
-  constexpr X Vector<T2, TSize> operator*(const Vector<T2, TSize>& rhs) const {
-    Vector<T2, 3> rv {};
-    for (auto i = 0; i < TSize; ++i) {
-      for (auto j = 0; j < TSize; ++j) {
-        rv[i] += data[i * 4 + j] * rhs.data[j];
-      }
-    }
-    return rv;
+  constexpr X float4 operator*(const float4& rhs) const {
+    return float4 {
+      dot(rows[0], rhs), dot(rows[1], rhs), dot(rows[2], rhs), rhs.w
+    };
+  }
+  constexpr X float3 operator*(const float3& rhs) const {
+    return float3 {
+      dot(*((float3*)&rows[0]), rhs),
+      dot(*((float3*)&rows[1]), rhs),
+      dot(*((float3*)&rows[2]), rhs)
+    };
   }
   inline X Transform operator*(const Transform& rhs) const {
     return Transform {
@@ -170,13 +99,13 @@ template<typename T,
       mat[8] * rhs.mat[3] + mat[9] * rhs.mat[7] + mat[10] * rhs.mat[11],
     };
   }
-  inline X Transform scale(T x, T y, T z) const {
+  inline X Transform scale(float x, float y, float z) const {
     return Transform { x,0,0,0, 0,y,0,0, 0,0,z,0 } *(*this);
   }
-  inline X Transform translate(T x, T y, T z) const {
+  inline X Transform translate(float x, float y, float z) const {
     return Transform { 0,0,0,x, 0,0,0,y, 0,0,0,z } *(*this);
   }
-  inline X Transform rotate(T x, T y, T z, T rad) const {
+  inline X Transform rotate(float x, float y, float z, float rad) const {
     auto sin = std::sinf(rad);
     auto cos = std::cosf(rad);
     auto rcos = 1.0f - cos;
@@ -212,6 +141,13 @@ template<typename T,
   }
 };
 
-using mat3x4 = Transform<float>;
 
-}
+
+// TODO: (penguinliong) Support multiple types of framebuffer.
+struct LaunchConfig {
+  uint3 launch_size;
+  OptixTraversableHandle trav;
+  uint32_t* framebuf;
+};
+
+} // namespace liong
