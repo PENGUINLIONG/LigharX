@@ -16,6 +16,22 @@ extern void destroy_ctxt(Context& ctxt);
 
 
 
+// Ensure a size is able to contain a `size` of content the even the content has
+// to be aligned.
+template<typename T,
+  typename _ = std::enable_if<std::is_integral_v<T> || std::is_pointer_v<T>>>
+  constexpr T align_size(T size, size_t align) {
+  return size + align - 1;
+}
+// Align an `addr` (in either a pointer or a integer) to an given alignment.
+template<typename T,
+  typename _ = std::enable_if<std::is_integral_v<T> || std::is_pointer_v<T>>>
+  constexpr T align_addr(T addr, size_t align) {
+  return (T)(((size_t)addr - 1 + align) / align * align);
+}
+
+
+
 // Allocate at least `size` bytes of memory and ensure the base address is
 // aligned to `align`.
 extern DeviceMemory alloc_mem(size_t size, size_t align = 1);
@@ -81,6 +97,11 @@ template<typename T,
   DeviceMemory shadow_mem(const T& buf, size_t align = 1) {
   return shadow_mem(&buf, sizeof(T), align);
 }
+
+
+
+extern Texture create_tex(const Context& ctxt, const TextureConfig& tex_cfg);
+extern void destroy_tex(Texture& tex);
 
 
 

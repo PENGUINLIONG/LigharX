@@ -39,16 +39,16 @@ constexpr float4 make_pt(float x, float y, float z) {
 constexpr float4 make_vec(float x, float y, float z) {
   return float4{ x, y, z, 0.0f };
 }
-constexpr uint32_t pack_unorm4(float4 x) {
+constexpr uint32_t pack_unorm4_abgr(float4 x) {
   return ((uint32_t)(x.x * 255)) |
     ((uint32_t)(x.y * 255) << 8) |
     ((uint32_t)(x.z * 255) << 16) |
     ((uint32_t)(x.w * 255) << 24);
 }
-constexpr uint32_t pack_unorm3(float3 x) {
+constexpr uint32_t pack_unorm3_abgr(float3 x) {
   return ((uint32_t)(x.x * 255)) |
     ((uint32_t)(x.y * 255) << 8) |
-    ((uint32_t)(x.z * 255) << 16);
+    ((uint32_t)(x.z * 255) << 16) | 0xFF000000;
 }
 
 // An 3x4 (float32) matrix transform.
@@ -69,12 +69,12 @@ struct Transform {
   X Transform& operator=(const Transform&) = default;
   X Transform& operator=(Transform&&) = default;
 
-  constexpr X float4 operator*(const float4& rhs) const {
+  inline X float4 operator*(const float4& rhs) const {
     return float4 {
       dot(rows[0], rhs), dot(rows[1], rhs), dot(rows[2], rhs), rhs.w
     };
   }
-  constexpr X float3 operator*(const float3& rhs) const {
+  inline X float3 operator*(const float3& rhs) const {
     return float3 {
       dot(*((float3*)&rows[0]), rhs),
       dot(*((float3*)&rows[1]), rhs),

@@ -7,6 +7,10 @@
 
 namespace liong {
 
+constexpr size_t L_OPTIMAL_DEVMEM_ALIGN = 128;
+// TODO: (penguinliong) dedicated allocation threshold.
+constexpr size_t L_DEDICATED_ALLOC_THRESH = 1024 * 1024; // 1MBytes
+
 //
 // Core functionalities.
 //
@@ -44,6 +48,70 @@ struct DeviceMemory {
   inline DeviceMemorySlice slice(size_t offset) const {
     return slice(offset, size - offset);
   }
+};
+
+enum TextureDimension {
+  L_TEXTURE_1D,
+  L_TEXTURE_2D,
+  L_TEXTURE_3D,
+};
+// Encoded pixel format that can be easily decoded by shift-and ops.
+//
+//   0bccshibbb
+//       \____/
+//  `CUarray_format`
+//
+// - `b`: Number of bits in exponent of 2. Only assigned if its a integral
+//   number.
+// - `i`: Signedness of integral number.
+// - `h`: Is a half-precision floating-point number.
+// - `s`: Is a single-precision floating-point number.
+// - `c`: Number of texel components (channels) minus 1. Currently only support
+//   upto 4 components.
+struct PixelFormat {
+  union {
+    struct {
+      uint8_t int_exp2 : 3;
+      uint8_t is_signed : 1;
+      uint8_t is_half : 1;
+      uint8_t is_single : 1;
+      uint8_t ncomp : 2;
+    };
+    uint8_t _raw;
+  };
+  constexpr PixelFormat(uint8_t raw) : _raw(raw) {}
+  constexpr PixelFormat() : _raw() {}
+  PixelFormat(const PixelFormat&) = default;
+  PixelFormat(PixelFormat&&) = default;
+  PixelFormat& operator=(const PixelFormat&) = default;
+  PixelFormat& operator=(PixelFormat&&) = default;
+
+  constexpr CUarray_format get_cuda_fmt() const { return (CUarray_format)(_raw & 0b00111111); }
+  constexpr uint32_t get_ncomp() const { return ncomp; }
+
+  constexpr bool operator==(const PixelFormat& b) { return _raw == b._raw; }
+};
+#define L_MAKE_VEC(ncomp, fmt) ((uint8_t)((ncomp - 1) << 6) | (uint8_t)fmt)
+constexpr PixelFormat L_FORMAT_UNDEFINED {};
+constexpr PixelFormat L_FORMAT_R8_UNORM { L_MAKE_VEC(1, CU_AD_FORMAT_UNSIGNED_INT8) };
+constexpr PixelFormat L_FORMAT_R32_SFLOAT { L_MAKE_VEC(1, CU_AD_FORMAT_FLOAT) };
+constexpr PixelFormat L_FORMAT_R8G8B8A8_UNORM { L_MAKE_VEC(4, CU_AD_FORMAT_UNSIGNED_INT8) };
+constexpr PixelFormat L_FORMAT_R32G32B32A32_SFLOAT { L_MAKE_VEC(4, CU_AD_FORMAT_FLOAT) };
+#undef L_MAKE_VEC
+struct TextureConfig {
+  DeviceMemorySlice tex_slice;
+  TextureDimension dim;
+  PixelFormat fmt;
+  uint32_t w, h, d;
+  size_t row_align;
+};
+struct SamplerConfig {
+  CUaddress_mode addr_mode;
+  CUfilter_mode filter_mode;
+};
+struct Texture {
+  CUtexObject tex;
+  TextureConfig tex_cfg;
 };
 
 

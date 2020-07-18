@@ -2,6 +2,7 @@
 #include "ext.hpp"
 #include "log.hpp"
 #include "x-mat.hpp"
+#include "mat.hpp"
 
 namespace {
 
@@ -55,8 +56,6 @@ int main() {
 
   initialize();
   liong::log::info("optix lab started");
-
-  liong::log::info(float3 { 1.0, 1.0, 1.0 });
 
   Context ctxt;
   Pipeline pipe;

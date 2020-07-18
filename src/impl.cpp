@@ -68,21 +68,6 @@ void destroy_ctxt(Context& ctxt) {
 }
 
 
-// Ensure a size is able to contain a `size` of content the even the content has
-// to be aligned.
-template<typename T,
-  typename _ = std::enable_if<std::is_integral_v<T> || std::is_pointer_v<T>>>
-  constexpr T align_size(T size, size_t align) {
-  return size + align - 1;
-}
-// Align an `addr` (in either a pointer or a integer) to an given alignment.
-template<typename T,
-  typename _ = std::enable_if<std::is_integral_v<T> || std::is_pointer_v<T>>>
-  constexpr T align_addr(T addr, size_t align) {
-  return (T)(((size_t)addr - 1 + align) / align * align);
-}
-
-
 DeviceMemory alloc_mem(size_t size, size_t align) {
   if (size == 0) { return DeviceMemory {}; }
   CUdeviceptr devmem {};
@@ -125,6 +110,40 @@ DeviceMemory shadow_mem(const void* buf, size_t size, size_t align) {
   auto devmem = alloc_mem(size, align);
   upload_mem(buf, devmem, size);
   return devmem;
+}
+
+Texture create_tex(
+  const Context& ctxt,
+  const TextureConfig& tex_cfg,
+  const SamplerConfig& sampler_cfg
+) {
+  CUtexObject tex;
+  CUDA_RESOURCE_DESC rsc_desc {};
+  rsc_desc.resType = CU_RESOURCE_TYPE_PITCH2D;
+  rsc_desc.res.pitch2D.devPtr = tex_cfg.tex_slice.ptr;
+  rsc_desc.res.pitch2D.format = tex_cfg.fmt.get_cuda_fmt();
+  rsc_desc.res.pitch2D.numChannels = tex_cfg.fmt.get_ncomp();
+  rsc_desc.res.pitch2D.width = tex_cfg.w;
+  rsc_desc.res.pitch2D.height = tex_cfg.h;
+  rsc_desc.res.pitch2D.pitchInBytes = tex_cfg.row_align;
+  CUDA_TEXTURE_DESC tex_desc {};
+  tex_desc.addressMode[0] = sampler_cfg.addr_mode;
+  tex_desc.addressMode[1] = sampler_cfg.addr_mode;
+  tex_desc.addressMode[2] = sampler_cfg.addr_mode;
+  tex_desc.filterMode = sampler_cfg.filter_mode;
+  CUDA_RESOURCE_VIEW_DESC rsc_view_desc {};
+  // Use what we have in `rsc_desc`.
+  rsc_view_desc.format = CU_RES_VIEW_FORMAT_NONE;
+  rsc_view_desc.width = tex_cfg.w;
+  rsc_view_desc.height = tex_cfg.h;
+  rsc_view_desc.depth = tex_cfg.d;
+  CUDA_ASSERT << cuTexObjectCreate(&tex, &rsc_desc, &tex_desc, &rsc_view_desc);
+  return Texture { tex, tex_cfg };
+}
+void destroy_tex(Texture& tex) {
+  CUDA_ASSERT << cuTexObjectDestroy(tex.tex);
+  tex.tex = {};
+  tex.tex_cfg = {};
 }
 
 
