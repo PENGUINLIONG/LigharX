@@ -17,12 +17,14 @@ private:
     size_t size;
     uint8_t data[MAX_MATERIAL_ENTRY_SIZE];
   };
+  std::vector<MaterialEntry> entries;
   MaterialBuilder& with(const void* data, size_t size);
 
 public:
-  size_t max_align;
-  size_t offset;
-  std::vector<MaterialEntry> entries;
+  // You SHOULD use this field.
+  size_t max_align = L_OPTIMAL_DEVMEM_ALIGN;
+  // You SHOULD use this field.
+  size_t size;
 
   // This will not add any new data but the global address of the next pushed
   // material entry will start from an address aligned to `align`. The memory
@@ -46,8 +48,12 @@ public:
     return with(&var, sizeof(var));
   }
 
-  // Create a material buffer with all collected data.
-  DeviceMemory build() const;
+  // Create a host memory contains material data. Returns true if the buffer can
+  // contain all the material data.
+  //
+  // WARNING: The preset alignment will only work if you shadow the built
+  // material buffer with alignemnt of `max_align`.
+  bool build(void* data, size_t size) const;
 };
 
 } // namespace liong

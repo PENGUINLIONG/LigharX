@@ -64,6 +64,16 @@ int main() {
   Transaction transact;
   DeviceMemory mat;
 
+  const auto sky_color = make_float3(0.5f, 0.5f, 0.5f);
+  const auto obj_color = make_float3(1.0f, 0.0f, 1.0f);
+  MaterialBuilder mat_build {};
+  mat_build
+    .with(obj_color)
+    .with(sky_color);
+  std::vector<uint8_t> mat_buf;
+  mat_buf.resize(mat_build.size);
+  mat_build.build((void*)mat_buf.data(), mat_buf.size());
+
   try {
     ctxt = create_ctxt();
     {
@@ -76,13 +86,7 @@ int main() {
     scene = create_scene(sobjs);
     pipe_data = create_pipe_data(pipe);
     transact = create_transact();
-
-    const auto sky_color = make_float3(0.5f, 0.5f, 0.5f);
-    const auto obj_color = make_float3(1.0f, 0.0f, 1.0f);
-    mat = MaterialBuilder()
-      .with(obj_color)
-      .with(sky_color)
-      .build();
+    mat = shadow_mem(mat_buf.data(), mat_buf.size(), mat_build.max_align);
     
     ext::cmd_build_sobjs(transact, ctxt, meshes, sobjs);
     wait_transact(transact);
