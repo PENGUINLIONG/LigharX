@@ -1,10 +1,11 @@
 #pragma once
 // Extensions to core functionalities.
 // @PENGUINLIONG
-#include <core.hpp>
+#include <functional>
 #include <assimp/cimport.h>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
+#include "core.hpp"
 
 namespace liong {
 
@@ -76,7 +77,6 @@ inline void cmd_build_sobjs(
   }
 }
 
+} // namespace ext
 
-}
-
-}
+} // namespace liong

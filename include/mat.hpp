@@ -1,6 +1,7 @@
 #pragma once
 // Material construction utilities.
 // @PENGUINLIONG
+#include <functional>
 #include <vector>
 #include "ty.hpp"
 #include "core.hpp"
@@ -55,5 +56,16 @@ public:
   // material buffer with alignemnt of `max_align`.
   bool build(void* data, size_t size) const;
 };
+
+inline DeviceMemory build_mat(
+  const std::function<void(MaterialBuilder&)>& mat_build_fn
+) {
+  MaterialBuilder mat_build {};
+  std::vector<uint8_t> mat_buf {};
+  mat_build_fn(mat_build);
+  mat_buf.resize(mat_build.size);
+  mat_build.build((void*)mat_buf.data(), mat_buf.size());
+  return shadow_mem(mat_buf.data(), mat_buf.size(), mat_build.max_align);
+}
 
 } // namespace liong
