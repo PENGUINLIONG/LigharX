@@ -21,21 +21,6 @@ Pipeline create_naive_pipe(
   const NaivePipelineConfig& naive_pipe_cfg
 );
 
-inline DeviceMemorySlice slice_naive_pipe_mat(
-  const Pipeline& pipe,
-  const PipelineData& pipe_data,
-  uint32_t idx
-) {
-  return slice_pipe_data(pipe, pipe_data, OPTIX_PROGRAM_GROUP_KIND_HITGROUP, idx);
-}
-inline DeviceMemorySlice slice_naive_pipe_env(
-  const Pipeline& pipe,
-  const PipelineData& pipe_data
-) {
-  return slice_pipe_data(pipe, pipe_data, OPTIX_PROGRAM_GROUP_KIND_MISS, 0);
-}
-
-
 
 inline std::vector<Mesh> create_meshes(
   const std::vector<MeshConfig>& mesh_cfgs,

@@ -1,7 +1,6 @@
 #include "core.hpp"
 #include "ext.hpp"
 #include "log.hpp"
-#include "x-mat.hpp"
 #include "mat.hpp"
 
 namespace {
@@ -27,7 +26,7 @@ using namespace liong;
 
 // Create pipeline config with scene object material (TMat) and environment
 // material (TEnv) which is used during ray miss.
-template<typename TMat, typename TEnv, size_t TTravDepth>
+template<size_t TTravDepth>
 Pipeline l_create_naive_pipe(
   const Context& ctxt,
   const std::vector<char>& ptx
@@ -42,8 +41,6 @@ Pipeline l_create_naive_pipe(
   naive_pipe_cfg.ms_name = "__miss__";
   naive_pipe_cfg.ch_name = "__closesthit__";
   naive_pipe_cfg.ah_name = "__anyhit__";
-  naive_pipe_cfg.env_size = sizeof(TEnv);
-  naive_pipe_cfg.mat_size = sizeof(TMat);
   naive_pipe_cfg.trace_depth = TTravDepth;
   return ext::create_naive_pipe(ctxt, naive_pipe_cfg);
 }
@@ -65,12 +62,13 @@ int main() {
   std::vector<SceneObject> sobjs;
   Scene scene;
   Transaction transact;
+  DeviceMemory mat;
 
   try {
     ctxt = create_ctxt();
     {
       auto ptx = ext::read_ptx("../assets/cuda_compile_ptx_1_generated_demo.cu.ptx");
-      pipe = l_create_naive_pipe<Material, Environment, 5>(ctxt, ptx);
+      pipe = l_create_naive_pipe<5>(ctxt, ptx);
     }
     framebuf = create_framebuf(32, 32);
     meshes = ext::import_meshes_from_file("./untitled.obj");
@@ -78,6 +76,13 @@ int main() {
     scene = create_scene(sobjs);
     pipe_data = create_pipe_data(pipe);
     transact = create_transact();
+
+    const auto sky_color = make_float3(0.5f, 0.5f, 0.5f);
+    const auto obj_color = make_float3(1.0f, 0.0f, 1.0f);
+    mat = MaterialBuilder()
+      .with(obj_color)
+      .with(sky_color)
+      .build();
     
     ext::cmd_build_sobjs(transact, ctxt, meshes, sobjs);
     wait_transact(transact);
@@ -92,15 +97,9 @@ int main() {
     wait_transact(transact);
 
     cmd_init_pipe_data(transact, pipe, pipe_data);
-    float3 sky_color[1] = { float3 { 0.5, 0.5, 0.5 } };
-    auto env_slice = ext::slice_naive_pipe_env(pipe, pipe_data);
-    cmd_upload_mem(transact, sky_color, env_slice, sizeof(float3));
-    float3 obj_color[1] = { float3 { 1.0, 0.0, 1.0 } };
-    auto mat_slice = ext::slice_naive_pipe_mat(pipe, pipe_data, 0);
-    cmd_upload_mem(transact, obj_color, mat_slice, sizeof(float3));
     wait_transact(transact);
 
-    cmd_traverse(transact, pipe, pipe_data, framebuf, scene);
+    cmd_traverse(transact, pipe, pipe_data, framebuf, mat, scene);
     wait_transact(transact);
 
     snapshot_framebuf(framebuf, "./snapshot.bmp");
@@ -112,6 +111,7 @@ int main() {
   } catch (...) {
     liong::log::error("application threw an illiterate exception");
   }
+  free_mem(mat);
   destroy_transact(transact);
   destroy_pipe_data(pipe_data);
   destroy_scene(scene);

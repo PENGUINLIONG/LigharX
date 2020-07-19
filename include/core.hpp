@@ -211,7 +211,8 @@ extern void cmd_download_mem(
 );
 
 // Create a CUDA stream and launch the stream for OptiX scene traversal
-// controlled by the given pipeline.
+// controlled by the given pipeline. The material `mat` is optional and can be
+// an zeroed `DeviceMemorySlice`, as long as the shader really don't need this.
 //
 // WARNING: `pipe` must be kept alive through out the lifetime of the created
 // transaction.
@@ -220,6 +221,7 @@ extern void cmd_traverse(
   const Pipeline& pipe,
   const PipelineData& pipe_data,
   const Framebuffer& framebuf,
+  const DeviceMemorySlice& mat,
   OptixTraversableHandle trav
 );
 // Create a CUDA stream and launch the stream for OptiX scene traversal
@@ -236,9 +238,10 @@ void cmd_traverse(
   const Pipeline& pipe,
   const PipelineData& pipe_data,
   const Framebuffer& framebuf,
+  const DeviceMemorySlice& mat,
   const TTrav& sobj
 ) {
-  cmd_traverse(transact, pipe, pipe_data, framebuf, sobj.inner->trav);
+  cmd_traverse(transact, pipe, pipe_data, framebuf, mat, sobj.inner->trav);
 }
 // Initialize `PipelineData` layout. An uninitialized `PipelineData` cannot be
 // correctly bound by its user pipeline and scheduling pipeline execution with

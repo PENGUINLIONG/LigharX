@@ -313,10 +313,8 @@ struct NaivePipelineConfig {
   unsigned trace_depth;
   const char* rg_name;
   const char* ms_name;
-  size_t env_size;
   const char* ah_name;
   const char* ch_name;
-  size_t mat_size;
 };
 
 

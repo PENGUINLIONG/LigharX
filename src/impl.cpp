@@ -661,13 +661,13 @@ void cmd_traverse(
   const Pipeline& pipe,
   const PipelineData& pipe_data,
   const Framebuffer& framebuf,
+  const DeviceMemorySlice& mat,
   OptixTraversableHandle trav
 ) {
-  auto lparam = LaunchConfig {
-    framebuf.width,
-    framebuf.height,
-    framebuf.depth,
+  auto lparam = LaunchConfig<> {
+    { framebuf.width, framebuf.height, framebuf.depth },
     trav,
+    mat.ptr,
     reinterpret_cast<uint32_t*>(framebuf.framebuf_devmem.ptr)
   };
   DeviceMemory lparam_devmem = shadow_mem(lparam);
@@ -894,7 +894,7 @@ Pipeline create_naive_pipe(
   pipe_cfg.ms_cfgs = {
     PipelineStageConfig {
       naive_pipe_cfg.ms_name,
-      naive_pipe_cfg.env_size
+      0
   }
   };
   pipe_cfg.hitgrp_cfgs = {
@@ -902,7 +902,7 @@ Pipeline create_naive_pipe(
       nullptr,
       naive_pipe_cfg.ah_name,
       naive_pipe_cfg.ch_name,
-      naive_pipe_cfg.mat_size
+      0
   }
   };
   return create_pipe(ctxt, pipe_cfg);

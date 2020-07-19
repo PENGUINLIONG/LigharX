@@ -1,131 +1,53 @@
 #pragma once
-// Material construction.
+// Material construction utilities.
 // @PENGUINLIONG
 #include <vector>
-#include <string>
 #include "ty.hpp"
+#include "core.hpp"
 
 namespace liong {
 
-enum MaterialEntryType {
-  L_MATERIAL_TYPE_ALIGNMENT,
-  L_MATERIAL_TYPE_TRIVIAL,
-  L_MATERIAL_TYPE_BUFFER,
-  L_MATERIAL_TYPE_TEXTURE_2D,
-};
-
-
-struct MaterialTrivialEntry {
-  static const size_t MAX_TRIVIAL_SIZE = 16; // Size of a float4.
-
-  size_t size;
-  uint8_t data[MAX_TRIVIAL_SIZE];
-};
-struct MaterialBufferEntry {
-  size_t size;
-  const void* data;
-};
-struct MaterialTextureEntry {
-  uint32_t w;
-  uint32_t h;
-  uint32_t d;
-  const void* data;
-  PixelFormat fmt;
-};
-struct MaterialAlignmentEntry {
-  size_t align;
-};
-
-struct MaterialEntry {
-  MaterialEntryType ty;
-  size_t offset;
-  union {
-    MaterialTrivialEntry trivial;
-    MaterialBufferEntry buf;
-    MaterialTextureEntry tex;
-    MaterialAlignmentEntry align;
-  };
-  MaterialEntry() {}
-};
-
-struct Material {
-  DeviceMemory devmem;
-};
-
 // NOTE: Meterial injection order is the linear storage order.
-struct MaterialBuilder {
+class MaterialBuilder {
+private:
+  struct MaterialEntry {
+    static const size_t MAX_MATERIAL_ENTRY_SIZE = 16; // Size of a float4.
+
+    size_t offset;
+    size_t size;
+    uint8_t data[MAX_MATERIAL_ENTRY_SIZE];
+  };
+  MaterialBuilder& with(const void* data, size_t size);
+
+public:
   size_t max_align;
   size_t offset;
-  size_t buffered_data_alloc_size;
   std::vector<MaterialEntry> entries;
 
-  inline void _reserve_buf_alloc(size_t inc) {
-    buffered_data_alloc_size = align_addr(buffered_data_alloc_size + inc,
-      L_OPTIMAL_DEVMEM_ALIGN);
-  }
-
-  // Without adding more data, align the base address to specified number of
-  // bytes. The value used for alignment will NOT be initialized.
-  void push_align(size_t align) {
-    max_align = std::max(align, max_align);
-    MaterialEntry entry;
-    entry.ty = L_MATERIAL_TYPE_ALIGNMENT;
-    entry.offset = offset;
-    entry.align.align = align;
-    offset = align_addr(offset, align);
-  }
-  // Plain data that will be trivially copied to device memory. Trivial data
-  // MUST NOT exceed `MaterialEntry::MAX_MATERIAL_ENTRY_SIZE`.
+  // This will not add any new data but the global address of the next pushed
+  // material entry will start from an address aligned to `align`. The memory
+  // padding has undefined content and SHOULD NOT be accessed anyway. The final
+  // allocated device memory will be aligned to the maximum alignment the entire
+  // object. The material buffer will at least be aligned to
+  // `L_OPTIMAL_DEVMEM_ALIGN`.
+  //
+  // WARNING: This method doesn't check but all the required alignment MUST be
+  // in the same power series, typically and most efficiently they are power of
+  // two.
+  MaterialBuilder& align(size_t align);
+  // Push a trivial value of any type within the valid size as specified
+  // previously, at the end of all existing material entries. It's worth
+  // noticing that this method also accept device memory pointers and texture
+  // object handles.
   template<typename T>
-  void push_trivial(T var) {
-    static_assert(sizeof(T) <= MaterialTrivialEntry::MAX_MATERIAL_ENTRY_SIZE,
+  inline MaterialBuilder& with(T var) {
+    static_assert(sizeof(T) <= MaterialEntry::MAX_MATERIAL_ENTRY_SIZE,
       "type is too large as a material entry, try input by buffer instead");
-    MaterialEntry entry;
-    entry.ty = L_MATERIAL_TYPE_TRIVIAL;
-    entry.offset = offset;
-    entry.trivial.size = sizeof(T);
-    *((T*)((const uint8_t*)entry.trivial.data)) = var;
-    entries.emplace_back(std::move(entry));
-    offset += sizeof(T);
-  }
-  // Device memory allocation, the input data buffer MUST be kept alive until
-  // the material is built.
-  void push_buf(const void* data, size_t size) {
-    MaterialEntry entry;
-    entry.ty = L_MATERIAL_TYPE_BUFFER;
-    entry.offset = offset;
-    entry.buf.size = size;
-    entry.buf.data = data;
-    entries.emplace_back(std::move(entry));
-    offset += sizeof(CUdeviceptr);
-    buffered_data_alloc_size += size;
-  }
-  // Sampled 2D texture, the input data buffer MUST be kept alive until the
-  // material is built.
-  void push_tex2d(
-    const void* data,
-    size_t size,
-    uint32_t w,
-    uint32_t h,
-    PixelFormat fmt
-  ) {
-    MaterialEntry entry;
-    entry.ty = L_MATERIAL_TYPE_TEXTURE_2D;
-    entry.offset = offset;
-    entry.tex.w = w;
-    entry.tex.h = h;
-    entry.tex.d = 1;
-    entry.tex.data = data;
-    entry.tex.fmt = fmt;
-    entries.emplace_back(std::move(entry));
-    offset += sizeof(CUtexObject);
-    buffered_data_alloc_size += size;
+    return with(&var, sizeof(var));
   }
 
-  Material build() {
-    throw std::logic_error("todo");
-  }
-
+  // Create a material buffer with all collected data.
+  DeviceMemory build() const;
 };
 
 } // namespace liong
