@@ -482,9 +482,9 @@ void snapshot_framebuf(const Framebuffer& framebuf, const char* path) {
     2835, // Vertical pixel per meter.
     0, // (Unused) color palette count.
     0, // (Unused) important color count.
-    0x00FF0000, // Red channel mask.
+    0x000000FF, // Red channel mask.
     0x0000FF00, // Green channel mask.
-    0x000000FF, // Blue channel mask.
+    0x00FF0000, // Blue channel mask.
     0xFF000000, // Alpha channel mask.
     0x57696E20, // Color space. ("Win ")
     0,0,0,0,0,0,0,0,0, // CIEXYZTRIPLE end point.
@@ -538,9 +538,10 @@ Mesh create_mesh(const MeshConfig& mesh_cfg) {
   build_in.triangleArray.indexFormat = mesh_cfg.idx_fmt;
   build_in.triangleArray.numIndexTriplets = mesh_cfg.ntri;
   build_in.triangleArray.indexStrideInBytes = mesh_cfg.tri_stride;
-  build_in.triangleArray.preTransform = pretrans_slice.ptr;
-  build_in.triangleArray.transformFormat =
-    OPTIX_TRANSFORM_FORMAT_MATRIX_FLOAT12;
+  //build_in.triangleArray.preTransform = pretrans_slice.ptr;
+  //build_in.triangleArray.transformFormat =
+  //  OPTIX_TRANSFORM_FORMAT_MATRIX_FLOAT12;
+  build_in.triangleArray.transformFormat = OPTIX_TRANSFORM_FORMAT_NONE;
   build_in.triangleArray.flags = new uint32_t[1] {};
   build_in.triangleArray.numSbtRecords = 1;
 

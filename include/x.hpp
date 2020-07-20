@@ -7,10 +7,10 @@
 #ifdef __CUDACC__
 #include <optix_device.h>
 // Cross-platform compilable function.
-#define X __device__
+#define X __forceinline__ __device__
 #else
 #include <optix.h>
-#define X
+#define X inline
 #endif // __CUDACC__
 #include "vector_math.h"
 
@@ -39,16 +39,30 @@ constexpr float4 make_pt(float x, float y, float z) {
 constexpr float4 make_vec(float x, float y, float z) {
   return float4{ x, y, z, 0.0f };
 }
-constexpr uint32_t pack_unorm4_abgr(float4 x) {
-  return ((uint32_t)(x.x * 255)) |
-    ((uint32_t)(x.y * 255) << 8) |
-    ((uint32_t)(x.z * 255) << 16) |
-    ((uint32_t)(x.w * 255) << 24);
+X uint32_t pack_unorm4_abgr(float4 x) {
+  x = clamp(x, 0, 1);
+  return ((uint32_t)(x.x * 255.999)) |
+    ((uint32_t)(x.y * 255.999) << 8) |
+    ((uint32_t)(x.z * 255.999) << 16) |
+    ((uint32_t)(x.w * 255.999) << 24);
 }
-constexpr uint32_t pack_unorm3_abgr(float3 x) {
-  return ((uint32_t)(x.x * 255)) |
-    ((uint32_t)(x.y * 255) << 8) |
-    ((uint32_t)(x.z * 255) << 16) | 0xFF000000;
+X uint32_t pack_unorm3_abgr(float3 x) {
+  x = clamp(x, 0, 1);
+  return ((uint32_t)(x.x * 255.999)) |
+    ((uint32_t)(x.y * 255.999) << 8) |
+    ((uint32_t)(x.z * 255.999) << 16) | 0xFF000000;
+}
+// Color encode real numbers in [0.0, 1.0] to integers in [0, 255] with linear
+// spacing, i.e., The chance a number rounded to 0 is equal to that rounded to
+// 255.
+X uint32_t color_encode_0p1(const float3& x) {
+  return pack_unorm3_abgr(x);
+}
+// Color encode real numbers in [-1.0, 1.0] to integers in [0, 255] with linear
+// spacing, i.e., The chance a number rounded to 0 is equal to that rounded to
+// 255.
+X uint32_t color_encode_n1p1(const float3& x) {
+  return color_encode_0p1(x / 2 + 0.5f);
 }
 
 // An 3x4 (float32) matrix transform.

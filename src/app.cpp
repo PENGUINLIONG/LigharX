@@ -49,7 +49,58 @@ Pipeline l_create_naive_pipe(
   return ext::create_naive_pipe(ctxt, naive_pipe_cfg);
 }
 
-MeshConfig l_create_cube_cfg() {
+
+MeshConfig l_create_mesh_cfg() {
+  const static float vert_buf[] = {
+    -0.5, 0.5, 0.0,
+    0.5, 0.5, 0.0,
+    -0.5, -0.5, 0.0,
+    0.5, -0.5, 0.0
+  };
+  const static uint16_t idx_buf[] = {
+    2, 3, 1,
+    2, 1, 0
+  };
+
+  auto mesh_cfg = MeshConfig {};
+  mesh_cfg.vert_buf = vert_buf;
+  mesh_cfg.vert_fmt = OPTIX_VERTEX_FORMAT_FLOAT3;
+  mesh_cfg.nvert = 4;
+  mesh_cfg.vert_stride = 3 * sizeof(float);
+  mesh_cfg.idx_buf = idx_buf;
+  mesh_cfg.idx_fmt = OPTIX_INDICES_FORMAT_UNSIGNED_SHORT3;
+  mesh_cfg.ntri = 2;
+  mesh_cfg.tri_stride = 3 * sizeof(uint16_t);
+
+  return mesh_cfg;
+}
+
+
+// FIXME: (penguinliong) This cannot be rendered.
+MeshConfig l_create_pln_cfg(const Transform& world2obj) {
+  static const float verts[] = {
+    -0.5, 0.0, -0.5,
+    -0.5, 0.0, 0.5,
+    0.5, 0.0, 0.5,
+    0.5, 0.0, -0.5
+  };
+  static const uint16_t idxs[] = {
+    0, 1, 2,   0, 2, 3,
+  };
+  MeshConfig mesh_cfg {};
+  mesh_cfg.pretrans = world2obj;
+  mesh_cfg.vert_buf = verts;
+  mesh_cfg.vert_fmt = OPTIX_VERTEX_FORMAT_FLOAT3;
+  mesh_cfg.nvert = 4;
+  mesh_cfg.vert_stride = 12;
+  mesh_cfg.idx_buf = idxs;
+  mesh_cfg.idx_fmt = OPTIX_INDICES_FORMAT_UNSIGNED_SHORT3;
+  mesh_cfg.ntri = 2;
+  mesh_cfg.tri_stride = 6;
+  return mesh_cfg;
+}
+
+MeshConfig l_create_cube_cfg(const Transform& world2obj) {
   const float p = 0.5;
   const float n = -0.5;
   static const float verts[] = {
@@ -79,13 +130,14 @@ MeshConfig l_create_cube_cfg() {
     e, f, g,   e, g, h
   };
   MeshConfig mesh_cfg {};
+  mesh_cfg.pretrans = world2obj;
   mesh_cfg.vert_buf = verts;
   mesh_cfg.vert_fmt = OPTIX_VERTEX_FORMAT_FLOAT3;
   mesh_cfg.nvert = 8;
   mesh_cfg.vert_stride = 12;
   mesh_cfg.idx_buf = idxs;
   mesh_cfg.idx_fmt = OPTIX_INDICES_FORMAT_UNSIGNED_SHORT3;
-  mesh_cfg.ntri = 2;
+  mesh_cfg.ntri = 12;
   mesh_cfg.tri_stride = 6;
   return mesh_cfg;
 }
@@ -121,12 +173,12 @@ int main() {
     ctxt = create_ctxt();
     {
       auto ptx = ext::read_ptx("../assets/cuda_compile_ptx_1_generated_demo.cu.ptx");
-      pipe = l_create_naive_pipe<1>(ctxt, ptx, env_ty, mat_ty);
+      pipe = l_create_naive_pipe<2>(ctxt, ptx, env_ty, mat_ty);
     }
-    framebuf = create_framebuf(32, 32);
+    framebuf = create_framebuf(1024, 1024);
     //meshes = ext::import_meshes_from_file("./untitled.obj");
     meshes = {};
-    meshes.push_back(create_mesh(l_create_cube_cfg()));
+    meshes.push_back(create_mesh(l_create_mesh_cfg()));
     sobjs = ext::create_sobjs(meshes.size());
     scene = create_scene();
     for (const auto& sobj : sobjs) {
@@ -155,7 +207,7 @@ int main() {
     // TODO: (penguinliong) `build_mat` into command.
     env = mat::create_mat(env_ty);
     {
-      const float3 sky_color = make_float3(0.75f, 0.25f, 0.75f);
+      const float3 sky_color = make_float3(0.5f, 0.5f, 0.5f);
       mat::assign_mat_entry(env_ty, env, "sky_color", &sky_color,
         sizeof(sky_color));
       auto env_slice = ext::slice_naive_pipe_env(pipe, pipe_data);
@@ -170,7 +222,7 @@ int main() {
       upload_mem(mat.data, mat_slice, mat.size);
     }
 
-    cmd_traverse(transact, pipe, pipe_data, framebuf, scene);
+    cmd_traverse(transact, pipe, pipe_data, framebuf, sobjs[0]);
     wait_transact(transact);
 
     snapshot_framebuf(framebuf, "./snapshot.bmp");
