@@ -501,20 +501,32 @@ void snapshot_framebuf(const Framebuffer& framebuf, const char* path) {
   f.close();
 }
 
-Mesh create_mesh(const MeshConfig& mesh_cfg, size_t mat_size) {
+Mesh create_mesh(const MeshConfig& mesh_cfg) {
+  auto vert_buf_offset = 0;
   auto vert_buf_size = mesh_cfg.nvert * mesh_cfg.vert_stride;
+
+  auto idx_buf_offset = vert_buf_offset +
+    align_addr(vert_buf_size, L_OPTIMAL_DEVMEM_ALIGN);
   auto idx_buf_size = mesh_cfg.ntri * mesh_cfg.tri_stride;
+
+  auto pretrans_offset = idx_buf_offset +
+    align_addr(idx_buf_size, OPTIX_GEOMETRY_TRANSFORM_BYTE_ALIGNMENT);
+  auto pretrans_size = sizeof(mesh_cfg.pretrans);
 
   ASSERT << (vert_buf_size != 0)
     << "vertex buffer size cannot be zero";
   ASSERT << (idx_buf_size != 0)
     << "triangle index buffer size cannot be zero";
 
-  auto devmem = alloc_mem(vert_buf_size + idx_buf_size);
-  auto vert_slice = devmem.slice(0, vert_buf_size);
-  auto idx_slice = devmem.slice(vert_buf_size, idx_buf_size);
+  auto alloc_size = pretrans_offset + pretrans_size;
+  auto devmem = alloc_mem(alloc_size);
+
+  auto vert_slice = devmem.slice(vert_buf_offset, vert_buf_size);
+  auto idx_slice = devmem.slice(idx_buf_offset, idx_buf_size);
+  auto pretrans_slice = devmem.slice(pretrans_offset, pretrans_size);
   upload_mem(mesh_cfg.vert_buf, vert_slice, vert_buf_size);
   upload_mem(mesh_cfg.idx_buf, idx_slice, idx_buf_size);
+  upload_mem(&mesh_cfg.pretrans, pretrans_slice, pretrans_size);
 
   OptixBuildInput build_in {};
   build_in.type = OPTIX_BUILD_INPUT_TYPE_TRIANGLES;
@@ -526,7 +538,9 @@ Mesh create_mesh(const MeshConfig& mesh_cfg, size_t mat_size) {
   build_in.triangleArray.indexFormat = mesh_cfg.idx_fmt;
   build_in.triangleArray.numIndexTriplets = mesh_cfg.ntri;
   build_in.triangleArray.indexStrideInBytes = mesh_cfg.tri_stride;
-  // TODO: (penguinliong) Pre-transform has been ignored for now.
+  build_in.triangleArray.preTransform = pretrans_slice.ptr;
+  build_in.triangleArray.transformFormat =
+    OPTIX_TRANSFORM_FORMAT_MATRIX_FLOAT12;
   build_in.triangleArray.flags = new uint32_t[1] {};
   build_in.triangleArray.numSbtRecords = 1;
 
@@ -534,9 +548,8 @@ Mesh create_mesh(const MeshConfig& mesh_cfg, size_t mat_size) {
     devmem,
     vert_slice,
     idx_slice,
+    pretrans_slice,
     build_in,
-    new char[mat_size],
-    mat_size
   };
 }
 void destroy_mesh(Mesh& mesh) {
@@ -544,19 +557,17 @@ void destroy_mesh(Mesh& mesh) {
     delete[] mesh.build_in.triangleArray.flags;
   }
   if (mesh.build_in.triangleArray.vertexBuffers) {
-    delete mesh.build_in.triangleArray.vertexBuffers;
+    delete[] mesh.build_in.triangleArray.vertexBuffers;
   }
   free_mem(mesh.devmem);
-  if (mesh.mat) { delete[] (char*)mesh.mat; }
   mesh = {};
   liong::log::info("destroyed mesh");
 }
 
 
-// Create a scene object and allocate a `mat_size`ed uninitialized material
-// buffer.
+
 SceneObject create_sobj() {
-  return SceneObject { new AsFeedback {}, DeviceMemory {} };
+  return SceneObject { new AsFeedback {} };
 }
 void destroy_sobj(SceneObject& sobj) {
   if (sobj.inner) {
@@ -569,14 +580,23 @@ void destroy_sobj(SceneObject& sobj) {
 
 
 
-Scene create_scene(const std::vector<SceneObject>& sobjs) {
-  return Scene { new AsFeedback {}, sobjs };
+Scene create_scene() {
+  return Scene { new AsFeedback {}, {} };
 }
 void destroy_scene(Scene& scene) {
   free_mem(scene.inner->devmem);
   if (scene.inner) { delete scene.inner; }
   scene = {};
   liong::log::info("destroyed scene");
+}
+void add_scene_sobj(
+  Scene& scene,
+  const SceneObject& sobj,
+  const Transform& trans,
+  const DeviceMemorySlice& mat_devmem
+) {
+  auto elem = SceneElement { sobj.inner->trav, trans, mat_devmem };
+  scene.elems.emplace_back(std::move(elem));
 }
 
 
@@ -661,13 +681,11 @@ void cmd_traverse(
   const Pipeline& pipe,
   const PipelineData& pipe_data,
   const Framebuffer& framebuf,
-  const DeviceMemorySlice& mat,
   OptixTraversableHandle trav
 ) {
-  auto lparam = LaunchConfig<> {
+  auto lparam = LaunchConfig {
     { framebuf.width, framebuf.height, framebuf.depth },
     trav,
-    mat.ptr,
     reinterpret_cast<uint32_t*>(framebuf.framebuf_devmem.ptr)
   };
   DeviceMemory lparam_devmem = shadow_mem(lparam);
@@ -783,7 +801,6 @@ void cmd_build_sobj(
 ) {
   // TODO (penguinliong): Check for already allocated output memory.
   _cmd_build_as(transact, ctxt, mesh.build_in, sobj.inner, can_compact);
-  sobj.mat_devmem = shadow_mem(mesh.mat, mesh.mat_size, 0);
   liong::log::info("scheduled scene object build");
 }
 
@@ -794,13 +811,11 @@ void cmd_build_scene(
   Scene& scene,
   bool can_compact
 ) {
-  auto ninst = scene.sobjs.size();
-  OptixInstance* insts = new OptixInstance[ninst];
-  for (auto i = 0; i < scene.sobjs.size(); ++i) {
-    OptixInstance inst {};
-    inst.transform[0] = 1.0f;
-    inst.transform[5] = 1.0f;
-    inst.transform[10] = 1.0f;
+  auto ninst = scene.elems.size();
+  OptixInstance* insts = new OptixInstance[ninst] {};
+  for (auto i = 0; i < scene.elems.size(); ++i) {
+    auto& inst = insts[i];
+    std::memcpy(inst.transform, &scene.elems[i].trans, sizeof(inst.transform));
     inst.instanceId = i;
     inst.sbtOffset = i * scene.sbt_stride;
     // TODO: (penguinliong) Do we need instance layering for rays?
@@ -808,8 +823,7 @@ void cmd_build_scene(
     // wasted here. That's brutal.
     inst.visibilityMask = 255;
     inst.flags = OPTIX_INSTANCE_FLAG_DISABLE_TRANSFORM;
-    inst.traversableHandle = scene.sobjs[i].inner->trav;
-    insts[i] = std::move(inst);
+    inst.traversableHandle = scene.elems[i].trav;
   }
   auto insts_devmem = shadow_mem(insts, sizeof(OptixInstance) * ninst,
     OPTIX_INSTANCE_BYTE_ALIGNMENT);
@@ -818,7 +832,7 @@ void cmd_build_scene(
   OptixBuildInput build_in {};
   build_in.type = OPTIX_BUILD_INPUT_TYPE_INSTANCES;
   build_in.instanceArray.instances = insts_devmem.ptr;
-  build_in.instanceArray.numInstances = scene.sobjs.size();
+  build_in.instanceArray.numInstances = ninst;
 
   _cmd_build_as(transact, ctxt, build_in, scene.inner, can_compact);
   // TODO (penguinliong): Check for already allocated output memory.
@@ -889,21 +903,21 @@ Pipeline create_naive_pipe(
     PipelineStageConfig {
       naive_pipe_cfg.rg_name,
       0
-  }
+    }
   };
   pipe_cfg.ms_cfgs = {
     PipelineStageConfig {
       naive_pipe_cfg.ms_name,
-      0
-  }
+      naive_pipe_cfg.env_size
+    }
   };
   pipe_cfg.hitgrp_cfgs = {
     PipelineHitGroupConfig {
       nullptr,
       naive_pipe_cfg.ah_name,
       naive_pipe_cfg.ch_name,
-      0
-  }
+      naive_pipe_cfg.mat_size
+    }
   };
   return create_pipe(ctxt, pipe_cfg);
 }

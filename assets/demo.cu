@@ -4,11 +4,14 @@ namespace liong {
 
 struct Material {
   float3 obj_color;
+};
+struct Environment {
   float3 sky_color;
 };
 
+
 LAUNCH_CFG
-LaunchConfig<Material> cfg;
+LaunchConfig cfg;
 
 
 SHADER_FN
@@ -42,9 +45,10 @@ float3 perspect_ray() {
 }
 */
 
+
 SHADER_MAIN
 void __closesthit__() {
-  const auto& mat = *cfg.mat;
+  const auto& mat = *(const Material*)optixGetSbtDataPointer();
   auto pColor = (float3*)WORDS2PTR(optixGetPayload_0(), optixGetPayload_1());
   *pColor = mat.obj_color;
 }
@@ -55,9 +59,9 @@ void __anyhit__() {
 
 SHADER_MAIN
 void __miss__() {
-  const auto& mat = *cfg.mat;
+  const auto& env = *(const Environment*)optixGetSbtDataPointer();
   auto pColor = (float3*)WORDS2PTR(optixGetPayload_0(), optixGetPayload_1());
-  *pColor = mat.sky_color;
+  *pColor = env.sky_color;
 }
 
 SHADER_MAIN

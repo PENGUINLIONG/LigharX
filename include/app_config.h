@@ -33,8 +33,8 @@
 #pragma once
 
 // Workaround.
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN 1
+#define NOMINMAX 1
 
 #ifndef APP_CONFIG_H
 #define APP_CONFIG_H

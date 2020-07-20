@@ -139,23 +139,32 @@ extern void snapshot_framebuf(const Framebuffer& framebuf, const char* path);
 
 // Create a mesh. The mesh data will be copied to the device side so it will be
 // safe to release after mesh creation.
-extern Mesh create_mesh(const MeshConfig& mesh_cfg, size_t mat_size = 0);
+extern Mesh create_mesh(const MeshConfig& mesh_cfg);
 extern void destroy_mesh(Mesh& mesh);
 
 
 
 // Create a scene object. The scene object is only traversable after being
-// built.
+// built with `cmd_build_sobj`. Currently static scene object transformation is
+// not supported. To traverse only one scene object with transformation you have
+// to apply the transformation to the underlying meshes.
 extern SceneObject create_sobj();
 extern void destroy_sobj(SceneObject& sobj);
 
 
 
-// Create a scene from a set of `SceneObject`s. The scene is only traversable
-// after being built. The parameter `SceneObject`s MUST have been built before
-// becoming a child of a scene.
-extern Scene create_scene(const std::vector<SceneObject>& sobjs);
+// Create a scene. The scene is only traversable after being built with
+// `cmd_build_scene`.
+extern Scene create_scene();
 extern void destroy_scene(Scene& scene);
+// Add a materialed scene object as a child of the scene. `sobj` MUST have
+// been built before, and `scene` MUST have NOT been built.
+extern void add_scene_sobj(
+  Scene& scene,
+  const SceneObject& sobj,
+  const Transform& trans,
+  const DeviceMemorySlice& mat_buf
+);
 
 
 
@@ -211,8 +220,7 @@ extern void cmd_download_mem(
 );
 
 // Create a CUDA stream and launch the stream for OptiX scene traversal
-// controlled by the given pipeline. The material `mat` is optional and can be
-// an zeroed `DeviceMemorySlice`, as long as the shader really don't need this.
+// controlled by the given pipeline.
 //
 // WARNING: `pipe` must be kept alive through out the lifetime of the created
 // transaction.
@@ -221,7 +229,6 @@ extern void cmd_traverse(
   const Pipeline& pipe,
   const PipelineData& pipe_data,
   const Framebuffer& framebuf,
-  const DeviceMemorySlice& mat,
   OptixTraversableHandle trav
 );
 // Create a CUDA stream and launch the stream for OptiX scene traversal
@@ -238,10 +245,9 @@ void cmd_traverse(
   const Pipeline& pipe,
   const PipelineData& pipe_data,
   const Framebuffer& framebuf,
-  const DeviceMemorySlice& mat,
   const TTrav& sobj
 ) {
-  cmd_traverse(transact, pipe, pipe_data, framebuf, mat, sobj.inner->trav);
+  cmd_traverse(transact, pipe, pipe_data, framebuf, sobj.inner->trav);
 }
 // Initialize `PipelineData` layout. An uninitialized `PipelineData` cannot be
 // correctly bound by its user pipeline and scheduling pipeline execution with

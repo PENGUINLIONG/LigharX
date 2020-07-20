@@ -140,18 +140,15 @@ struct Transform {
     };
   }
 };
+static_assert(sizeof(Transform) == sizeof(float[12]),
+  "type `Transform` have incompatable size than optix transform");
 
 
 
 // TODO: (penguinliong) Support multiple types of framebuffer.
-template<typename T = CUdeviceptr>
 struct LaunchConfig {
-  template<typename TMat>
-  using ptrsel = std::conditional_t<std::is_same_v<TMat, CUdeviceptr>, CUdeviceptr, const TMat*>;
-
   uint3 launch_size;
   OptixTraversableHandle trav;
-  typename ptrsel<T> mat;
   uint32_t* framebuf;
 };
 

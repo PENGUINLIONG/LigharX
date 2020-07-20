@@ -215,6 +215,9 @@ struct Framebuffer {
 
 
 struct MeshConfig {
+  // Pre-applied transformation of mesh.
+  Transform pretrans;
+
   // Vertex data buffer.
   const void* vert_buf;
   // Format of vertex data.
@@ -237,12 +240,8 @@ struct Mesh {
   DeviceMemory devmem;
   DeviceMemorySlice vert_slice;
   DeviceMemorySlice idx_slice;
+  DeviceMemorySlice pretrans_slice;
   OptixBuildInput build_in;
-  // Material buffer allocated in the size specified by the user. The user
-  // SHOULD directly write into this buffer to turn in the material data.
-  void* mat;
-  // Size of the material buffer.
-  size_t mat_size;
 };
 
 
@@ -260,15 +259,18 @@ struct AsFeedback {
 struct SceneObject {
   // Acceleration structure build feedback.
   AsFeedback* inner;
-  // Material data buffer.
-  DeviceMemory mat_devmem;
+};
+struct SceneElement {
+  OptixTraversableHandle trav;
+  Transform trans;
+  DeviceMemorySlice mat_devmem;
 };
 // Traversable object collection.
 struct Scene {
   // Acceleration structure build feedback.
   AsFeedback* inner;
   // Scene objects as components in the scene
-  std::vector<SceneObject> sobjs;
+  std::vector<SceneElement> elems;
   // Maximal size of an SBT record aligned to `OPTIX_SBT_RECORD_ALIGNMENT`.
   size_t sbt_stride;
 };
@@ -315,6 +317,14 @@ struct NaivePipelineConfig {
   const char* ms_name;
   const char* ah_name;
   const char* ch_name;
+  // Size of Environment material to be allocated. this material will be
+  // accessible in the miss stage of the pipeline, by the base address returned
+  // from `optixGetSbtDataPointer`.
+  size_t env_size;
+  // Size of Hit material to be allocated. This material will be accessible in
+  // intersection, any-hit and closest-hit programs of the pipeline by the base
+  // address returned from `optixGetSbtDataPointer`. This is per-instance data.
+  size_t mat_size;
 };
 
 
