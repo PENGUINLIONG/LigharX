@@ -51,19 +51,12 @@ void __miss__() {
 
 SHADER_MAIN
 void __raygen__() {
-  float4 o = { 0, 0, 0, 1 };
-  float4 right = { 1, 0, 0, 0 };
-  float4 up = { 0, 1, 0, 0 };
   auto trans = Transform()
     .translate(0, 0, -1)
     .rotate({ 1.0, 0.0, 0.0 }, deg2rad(45.0f))
     .rotate({ 0.0, 1.0, 0.0 }, deg2rad(-45.0f))
     .scale(2, 2, 2);
-  o = trans * o;
-  right = trans * right;
-  up = trans * up;
-
-  Ray ray = ortho_ray(make_float3(o), make_float3(right), make_float3(up));
+  Ray ray = ortho_ray(trans);
 
   RayLife<TraversalResult> life {};
   life.ttl = 1;
