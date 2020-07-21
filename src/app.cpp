@@ -163,7 +163,7 @@ int main() {
 
   // Define materials.
   mat::MaterialType env_ty {};
-  mat::push_mat_ty_entry(env_ty, "sky_color", sizeof(float3));
+  mat::push_mat_ty_entry(env_ty, "ambient", sizeof(float3));
   mat::MaterialType mat_ty {};
   mat::push_mat_ty_entry(mat_ty, "albedo", sizeof(float3));
   mat::push_mat_ty_entry(mat_ty, "emit", sizeof(float3));
@@ -177,7 +177,7 @@ int main() {
       auto ptx = ext::read_ptx("../assets/cuda_compile_ptx_1_generated_demo.cu.ptx");
       pipe = l_create_naive_pipe<2>(ctxt, ptx, env_ty, mat_ty);
     }
-    framebuf = create_framebuf(1024, 1024);
+    framebuf = create_framebuf(256, 256);
     //meshes = ext::import_meshes_from_file("./untitled.obj");
     // Initialize meshes.
     meshes = {};
@@ -188,7 +188,7 @@ int main() {
 
     /* Cube 1 */ {
       auto trans = Transform()
-        .translate(-1, 0.75, 0);
+        .translate(-1, -0.75, 0);
       add_scene_sobj(scene, sobjs[0], trans, DeviceMemorySlice {});
     }
     /* Cube 2 */ {
@@ -200,7 +200,7 @@ int main() {
     }
     /* Cube 3 */ {
       auto trans = Transform()
-        .translate(-1, -0.75, 0);
+        .translate(-1, 0.75, 0);
       add_scene_sobj(scene, sobjs[0], trans, DeviceMemorySlice {});
     }
     
@@ -227,9 +227,8 @@ int main() {
 
     /* Environment material */ {
       env = mat::create_mat(env_ty);
-      const float3 sky_color = make_float3(0.5f, 0.5f, 0.5f);
-      mat::assign_mat_entry(env_ty, env, "sky_color", &sky_color,
-        sizeof(sky_color));
+      const float3 ambient = unquant_unorm8_rgb(50, 50, 50);
+      mat::assign_mat_entry(env_ty, env, "ambient", &ambient, sizeof(ambient));
       auto env_slice = ext::slice_naive_pipe_env(pipe, pipe_data);
       upload_mem(env.data, env_slice, env.size);
       mat::destroy_mat(env);

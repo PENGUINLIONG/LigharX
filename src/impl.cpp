@@ -770,8 +770,11 @@ void _cmd_build_as(
   const size_t TRAV_OFFSET = BUILD_PROP_OFFSET + BUILD_PROP_COMPACT_DL_SIZE;
 
   OptixAccelBuildOptions build_opt = {
+    // Otherwise `optixGetTriangleVertexData` won't work. Two hours have been
+    // wasted here.
+    OPTIX_BUILD_FLAG_ALLOW_RANDOM_VERTEX_ACCESS |
     // TODO: (penguinliong) Update, compaction, build/trace speed preference.
-    can_compact ? OPTIX_BUILD_FLAG_ALLOW_COMPACTION : OPTIX_BUILD_FLAG_NONE,
+    (can_compact ? OPTIX_BUILD_FLAG_ALLOW_COMPACTION : OPTIX_BUILD_FLAG_NONE),
     OPTIX_BUILD_OPERATION_BUILD,
     // Motion not supported.
     OptixMotionOptions { 0, OPTIX_MOTION_FLAG_NONE, 0.0, 0.0 }
