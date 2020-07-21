@@ -222,7 +222,7 @@ int main() {
       upload_mem(mat.data, mat_slice, mat.size);
     }
 
-    cmd_traverse(transact, pipe, pipe_data, framebuf, sobjs[0]);
+    cmd_traverse(transact, pipe, pipe_data, framebuf, scene);
     wait_transact(transact);
 
     snapshot_framebuf(framebuf, "./snapshot.bmp");

@@ -157,8 +157,9 @@ extern void destroy_sobj(SceneObject& sobj);
 // `cmd_build_scene`.
 extern Scene create_scene();
 extern void destroy_scene(Scene& scene);
-// Add a materialed scene object as a child of the scene. `sobj` MUST have
-// been built before, and `scene` MUST have NOT been built.
+// Add a materialed scene object as a child of the scene. It is ALLOWED to add
+// scene object to a scene while the object are still being built, but you MUST
+// wait the building of scene objects to finish before you build the scene.
 extern void add_scene_sobj(
   Scene& scene,
   const SceneObject& sobj,

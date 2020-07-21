@@ -261,7 +261,8 @@ struct SceneObject {
   AsFeedback* inner;
 };
 struct SceneElement {
-  OptixTraversableHandle trav;
+  // This is borrowed from the children scene objects so remember to keep them alive.
+  const AsFeedback* asfb;
   Transform trans;
   DeviceMemorySlice mat_devmem;
 };

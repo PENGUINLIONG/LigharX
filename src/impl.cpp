@@ -596,7 +596,7 @@ void add_scene_sobj(
   const Transform& trans,
   const DeviceMemorySlice& mat_devmem
 ) {
-  auto elem = SceneElement { sobj.inner->trav, trans, mat_devmem };
+  auto elem = SceneElement { sobj.inner, trans, mat_devmem };
   scene.elems.emplace_back(std::move(elem));
 }
 
@@ -824,7 +824,7 @@ void cmd_build_scene(
     // wasted here. That's brutal.
     inst.visibilityMask = 255;
     inst.flags = OPTIX_INSTANCE_FLAG_DISABLE_TRANSFORM;
-    inst.traversableHandle = scene.elems[i].trav;
+    inst.traversableHandle = scene.elems[i].asfb->trav;
   }
   auto insts_devmem = shadow_mem(insts, sizeof(OptixInstance) * ninst,
     OPTIX_INSTANCE_BYTE_ALIGNMENT);
