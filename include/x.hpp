@@ -64,6 +64,16 @@ X uint32_t color_encode_0p1(const float3& x) {
 X uint32_t color_encode_n1p1(const float3& x) {
   return color_encode_0p1(x / 2 + 0.5f);
 }
+X float3 unquant_unorm8_rgb(uint8_t r, uint8_t g, uint8_t b) {
+  return make_float3(r / 255.0f, g / 255.0f, b / 255.0f);
+}
+
+constexpr float deg2rad(float deg) {
+  return deg / 180.0f * M_PI;
+}
+constexpr float rad2deg(float deg) {
+  return deg / M_PI * 180.0f;
+}
 
 // An 3x4 (float32) matrix transform.
 struct Transform {
@@ -88,36 +98,38 @@ struct Transform {
       dot(rows[0], rhs), dot(rows[1], rhs), dot(rows[2], rhs), rhs.w
     };
   }
-  inline X float3 operator*(const float3& rhs) const {
-    return float3 {
-      dot(*((float3*)&rows[0]), rhs),
-      dot(*((float3*)&rows[1]), rhs),
-      dot(*((float3*)&rows[2]), rhs)
-    };
-  }
   inline X Transform operator*(const Transform& rhs) const {
     return Transform {
       mat[0] * rhs.mat[0] + mat[1] * rhs.mat[4] + mat[2] * rhs.mat[8],
       mat[0] * rhs.mat[1] + mat[1] * rhs.mat[5] + mat[2] * rhs.mat[9],
       mat[0] * rhs.mat[2] + mat[1] * rhs.mat[6] + mat[2] * rhs.mat[10],
-      mat[0] * rhs.mat[3] + mat[1] * rhs.mat[7] + mat[2] * rhs.mat[11],
+      mat[0] * rhs.mat[3] + mat[1] * rhs.mat[7] + mat[2] * rhs.mat[11]
+        + mat[3],
 
       mat[4] * rhs.mat[0] + mat[5] * rhs.mat[4] + mat[6] * rhs.mat[8],
       mat[4] * rhs.mat[1] + mat[5] * rhs.mat[5] + mat[6] * rhs.mat[9],
       mat[4] * rhs.mat[2] + mat[5] * rhs.mat[6] + mat[6] * rhs.mat[10],
-      mat[4] * rhs.mat[3] + mat[5] * rhs.mat[7] + mat[6] * rhs.mat[11],
+      mat[4] * rhs.mat[3] + mat[5] * rhs.mat[7] + mat[6] * rhs.mat[11]
+        + mat[7],
 
       mat[8] * rhs.mat[0] + mat[9] * rhs.mat[4] + mat[10] * rhs.mat[8],
       mat[8] * rhs.mat[1] + mat[9] * rhs.mat[5] + mat[10] * rhs.mat[9],
       mat[8] * rhs.mat[2] + mat[9] * rhs.mat[6] + mat[10] * rhs.mat[10],
-      mat[8] * rhs.mat[3] + mat[9] * rhs.mat[7] + mat[10] * rhs.mat[11],
+      mat[8] * rhs.mat[3] + mat[9] * rhs.mat[7] + mat[10] * rhs.mat[11]
+        + mat[11],
     };
   }
   inline X Transform scale(float x, float y, float z) const {
     return Transform { x,0,0,0, 0,y,0,0, 0,0,z,0 } *(*this);
   }
+  inline X Transform scale(float3 v) const {
+    return scale(v.x, v.y, v.z);
+  }
   inline X Transform translate(float x, float y, float z) const {
-    return Transform { 0,0,0,x, 0,0,0,y, 0,0,0,z } *(*this);
+    return Transform { 1,0,0,x, 0,1,0,y, 0,0,1,z } *(*this);
+  }
+  inline X Transform translate(float3 v) const {
+    return translate(v.x, v.y, v.z);
   }
   inline X Transform rotate(float x, float y, float z, float rad) const {
     auto sin = std::sinf(rad);
@@ -128,6 +140,9 @@ struct Transform {
         rcos * y * x + sin * z, cos + rcos * y * y, rcos * y * z - sin * x, 0,
         rcos * z * x - sin * y, rcos * z * y + sin * x, cos + rcos * z * z, 0,
     } *(*this);
+  }
+  inline X Transform rotate(float3 axis, float rad) const {
+    return rotate(axis.x, axis.y, axis.z, rad);
   }
   inline X Transform inverse() const {
     auto det = mat[0] * mat[5] * mat[10] -

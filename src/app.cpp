@@ -46,6 +46,7 @@ Pipeline l_create_naive_pipe(
   naive_pipe_cfg.env_size = env.size;
   naive_pipe_cfg.mat_size = mat.size;
   naive_pipe_cfg.trace_depth = TTravDepth;
+  naive_pipe_cfg.max_ninst = 3;
   return ext::create_naive_pipe(ctxt, naive_pipe_cfg);
 }
 
@@ -164,7 +165,8 @@ int main() {
   mat::MaterialType env_ty {};
   mat::push_mat_ty_entry(env_ty, "sky_color", sizeof(float3));
   mat::MaterialType mat_ty {};
-  mat::push_mat_ty_entry(mat_ty, "obj_color", sizeof(float3));
+  mat::push_mat_ty_entry(mat_ty, "albedo", sizeof(float3));
+  mat::push_mat_ty_entry(mat_ty, "emit", sizeof(float3));
 
   mat::Material env;
   mat::Material mat;
@@ -177,15 +179,34 @@ int main() {
     }
     framebuf = create_framebuf(1024, 1024);
     //meshes = ext::import_meshes_from_file("./untitled.obj");
+    // Initialize meshes.
     meshes = {};
-    meshes.push_back(create_mesh(l_create_mesh_cfg()));
+    meshes.push_back(create_mesh(l_create_cube_cfg(Transform {})));
     sobjs = ext::create_sobjs(meshes.size());
     scene = create_scene();
-    for (const auto& sobj : sobjs) {
-      // TODO: (penguinliong) Use the material data passed from scene
-      // description.
-      add_scene_sobj(scene, sobj, Transform {}, DeviceMemorySlice {});
+
+
+    /* Cube 1 */ {
+      auto trans = Transform()
+        .translate(-1, 0.75, 0);
+      add_scene_sobj(scene, sobjs[0], trans, DeviceMemorySlice {});
     }
+    /* Cube 2 */ {
+      auto trans = Transform()
+        .translate(0, 1, 0.25)
+        .rotate(normalize(make_float3(1, -1, 0)), deg2rad(-15))
+        .translate(0.75, 0, 0);
+      add_scene_sobj(scene, sobjs[0], trans, DeviceMemorySlice {});
+    }
+    /* Cube 3 */ {
+      auto trans = Transform()
+        .translate(-1, -0.75, 0);
+      add_scene_sobj(scene, sobjs[0], trans, DeviceMemorySlice {});
+    }
+    
+
+
+
     pipe_data = create_pipe_data(pipe);
     transact = create_transact();
 
@@ -204,22 +225,44 @@ int main() {
     cmd_init_pipe_data(transact, pipe, pipe_data);
     wait_transact(transact);
 
-    // TODO: (penguinliong) `build_mat` into command.
-    env = mat::create_mat(env_ty);
-    {
+    /* Environment material */ {
+      env = mat::create_mat(env_ty);
       const float3 sky_color = make_float3(0.5f, 0.5f, 0.5f);
       mat::assign_mat_entry(env_ty, env, "sky_color", &sky_color,
         sizeof(sky_color));
       auto env_slice = ext::slice_naive_pipe_env(pipe, pipe_data);
       upload_mem(env.data, env_slice, env.size);
+      mat::destroy_mat(env);
     }
-    mat = mat::create_mat(mat_ty);
-    {
-      const float3 obj_color = make_float3(1.0f, 0.0f, 1.0f);
-      mat::assign_mat_entry(mat_ty, mat, "obj_color", &obj_color,
-        sizeof(obj_color));
+    /* Cube 1 material */ {
+      mat = mat::create_mat(mat_ty);
+      const float3 albedo = unquant_unorm8_rgb(245, 228, 0);
+      const float3 emit = unquant_unorm8_rgb(245, 228, 0);
+      mat::assign_mat_entry(mat_ty, mat, "albedo", &albedo, sizeof(albedo));
+      mat::assign_mat_entry(mat_ty, mat, "emit", &emit, sizeof(emit));
       auto mat_slice = ext::slice_naive_pipe_mat(pipe, pipe_data, 0);
       upload_mem(mat.data, mat_slice, mat.size);
+      mat::destroy_mat(mat);
+    }
+    /* Cube 2 material */ {
+      mat = mat::create_mat(mat_ty);
+      const float3 albedo = unquant_unorm8_rgb(68, 228, 235);
+      const float3 emit = unquant_unorm8_rgb(32, 173, 150);
+      mat::assign_mat_entry(mat_ty, mat, "albedo", &albedo, sizeof(albedo));
+      mat::assign_mat_entry(mat_ty, mat, "emit", &emit, sizeof(emit));
+      auto mat_slice = ext::slice_naive_pipe_mat(pipe, pipe_data, 1);
+      upload_mem(mat.data, mat_slice, mat.size);
+      mat::destroy_mat(mat);
+    }
+    /* Cube 3 material */ {
+      mat = mat::create_mat(mat_ty);
+      const float3 albedo = unquant_unorm8_rgb(230, 50, 70);
+      const float3 emit = unquant_unorm8_rgb(150, 32, 55);
+      mat::assign_mat_entry(mat_ty, mat, "albedo", &albedo, sizeof(albedo));
+      mat::assign_mat_entry(mat_ty, mat, "emit", &emit, sizeof(emit));
+      auto mat_slice = ext::slice_naive_pipe_mat(pipe, pipe_data, 2);
+      upload_mem(mat.data, mat_slice, mat.size);
+      mat::destroy_mat(mat);
     }
 
     cmd_traverse(transact, pipe, pipe_data, framebuf, scene);
@@ -231,11 +274,10 @@ int main() {
   } catch (const std::exception& e) {
     liong::log::error("application threw an exception");
     liong::log::error(e.what());
+    liong::log::error("application cannot continue");
   } catch (...) {
     liong::log::error("application threw an illiterate exception");
   }
-  mat::destroy_mat(mat);
-  mat::destroy_mat(env);
   destroy_transact(transact);
   destroy_pipe_data(pipe_data);
   destroy_scene(scene);

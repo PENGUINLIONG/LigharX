@@ -114,7 +114,8 @@ extern void destroy_pipe(Pipeline& pipe);
 
 
 
-// Create pipeline data. PIpeline data MUST be initialized before use.
+// Create pipeline data. Pipeline data MUST be initialized with
+// `cmd_init_pipe_data` before use.
 extern PipelineData create_pipe_data(const Pipeline& pipe);
 extern void destroy_pipe_data(PipelineData& pipe);
 extern DeviceMemorySlice slice_pipe_data(

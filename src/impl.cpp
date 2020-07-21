@@ -241,6 +241,9 @@ PipelinePrep _create_pipe_prep(
   sbt_size += pipe_layout.sbt_miss_stride * pipe_layout.nsbt_miss;
 
   pipe_layout.sbt_hitgrp_offset = sbt_size;
+  // TODO: (penguinliong) Check out actually how to implement multiple ray
+  // types. Feels like it's not allowed to have multiple hit-groups in a single
+  // pipeline?
   pipe_layout.nsbt_hitgrp = pipe_cfg.hitgrp_cfgs.size();
   for (auto& hitgrp_cfg : pipe_cfg.hitgrp_cfgs) {
     OptixProgramGroupDesc pgrp_desc {};
@@ -261,7 +264,8 @@ PipelinePrep _create_pipe_prep(
     pipe_layout.sbt_hitgrp_stride =
       std::max(_sbt_align(hitgrp_cfg.data_size), pipe_layout.sbt_hitgrp_stride);
   }
-  sbt_size += pipe_layout.sbt_hitgrp_stride * pipe_layout.nsbt_hitgrp;
+  sbt_size += pipe_cfg.max_ninst * // Do note this.
+    (pipe_layout.sbt_hitgrp_stride * pipe_layout.nsbt_hitgrp);
 
   pipe_layout.sbt_call_offset = sbt_size;
   pipe_layout.nsbt_call = pipe_cfg.call_cfgs.size();
@@ -295,6 +299,7 @@ PipelinePrep _create_pipe_prep(
   OPTIX_ASSERT << res;
 
   pipe_layout.sbt_size = sbt_size;
+  pipe_layout.max_ninst = pipe_cfg.max_ninst;
   return pipe_prep;
 }
 OptixPipeline _create_pipe(
@@ -343,6 +348,8 @@ void _set_pipe_stack_size(OptixPipeline pipe, const PipelineConfig& pipe_cfg) {
 
 
 Pipeline create_pipe(const Context& ctxt, const PipelineConfig& pipe_cfg) {
+  ASSERT << (pipe_cfg.max_ninst > 0)
+    << "maximum instance count must be specified";
   auto mod = _create_mod(ctxt, pipe_cfg);
   auto pipe_prep = _create_pipe_prep(ctxt, pipe_cfg, mod);
   auto pipe = _create_pipe(ctxt, pipe_cfg, pipe_prep.pgrps);
@@ -722,12 +729,22 @@ void cmd_init_pipe_data(
     OPTIX_ASSERT << optixSbtRecordPackHeader(pipe.pgrps[i], hbase);            \
     ++i;                                                                       \
   }
+#define L_FILL_SBT_INSTANCED_MULTI_DATA(optix_name, prep_name, cfg_name)       \
+  for (auto j = 0; j < pipe_layout.nsbt_##prep_name; ++j) {                    \
+    for (auto k = 0; k < pipe_layout.max_ninst; ++k) {                         \
+      auto hbase = sbt_hostbuf + pipe_layout.sbt_##prep_name##_offset +        \
+        pipe_layout.sbt_##prep_name##_stride *                                 \
+        (k * pipe_layout.nsbt_##prep_name + j);                                \
+      OPTIX_ASSERT << optixSbtRecordPackHeader(pipe.pgrps[i], hbase);          \
+    }                                                                          \
+    ++i;                                                                       \
+  }
 
   // ORDER IS IMPORTANT; DO NOT RESORT >>>
   L_FILL_SBT_SINGLE_DATA(raygen, raygen, rg);
   L_FILL_SBT_SINGLE_DATA(exception, except, ex);
   L_FILL_SBT_MULTI_DATA(miss, miss, ms);
-  L_FILL_SBT_MULTI_DATA(hitgroup, hitgrp, hitgrp);
+  L_FILL_SBT_INSTANCED_MULTI_DATA(hitgroup, hitgrp, hitgrp);
   L_FILL_SBT_MULTI_DATA(callables, call, dc);
   L_FILL_SBT_MULTI_DATA(callables, call, cc);
   // <<< ORDER IS IMPORTANT; DO NOT RESORT
@@ -818,12 +835,16 @@ void cmd_build_scene(
     auto& inst = insts[i];
     std::memcpy(inst.transform, &scene.elems[i].trans, sizeof(inst.transform));
     inst.instanceId = i;
-    inst.sbtOffset = i * scene.sbt_stride;
+    // TODO: (penguinliong) We only allow one type of ray to be casted at a time
+    // currently... and I think even if we want to cast multiple types of rays
+    // we can stuff all those useful data into a single SBT record?
+    inst.sbtOffset = i;
     // TODO: (penguinliong) Do we need instance layering for rays?
     // WARNING: DO NOT use `~0` instead of 255. 2 of my precious hours has been
     // wasted here. That's brutal.
     inst.visibilityMask = 255;
-    inst.flags = OPTIX_INSTANCE_FLAG_DISABLE_TRANSFORM;
+    inst.flags = OPTIX_INSTANCE_FLAG_NONE;
+    //inst.flags = OPTIX_INSTANCE_FLAG_DISABLE_TRANSFORM;
     inst.traversableHandle = scene.elems[i].asfb->trav;
   }
   auto insts_devmem = shadow_mem(insts, sizeof(OptixInstance) * ninst,
@@ -900,6 +921,7 @@ Pipeline create_naive_pipe(
   pipe_cfg.npayload_wd = 2;
   pipe_cfg.nattr_wd = 2;
   pipe_cfg.trace_depth = naive_pipe_cfg.trace_depth;
+  pipe_cfg.max_ninst = naive_pipe_cfg.max_ninst;
   pipe_cfg.rg_cfg = {
     PipelineStageConfig {
       naive_pipe_cfg.rg_name,

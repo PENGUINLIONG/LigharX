@@ -160,6 +160,9 @@ struct PipelineConfig {
   int nattr_wd;
   // Maximum trace recursion depth. [0..31]
   unsigned trace_depth;
+  // Maximum number of instances can be contained in the traversed scene; MUST
+  // be equal to or greater than 1.
+  uint32_t max_ninst;
 
   // Although it's POSSIBLE to use multiple raygen functions but for efficiency
   // here we DO NOT support it.
@@ -189,6 +192,7 @@ struct PipelineLayout {
   size_t nsbt_call;
 
   size_t sbt_size;
+  uint32_t max_ninst;
 };
 // Pipeline-related opaque resources.
 struct Pipeline {
@@ -272,8 +276,6 @@ struct Scene {
   AsFeedback* inner;
   // Scene objects as components in the scene
   std::vector<SceneElement> elems;
-  // Maximal size of an SBT record aligned to `OPTIX_SBT_RECORD_ALIGNMENT`.
-  size_t sbt_stride;
 };
 
 
@@ -314,6 +316,7 @@ struct NaivePipelineConfig {
   const char* ptx_data;
   size_t ptx_size;
   unsigned trace_depth;
+  uint32_t max_ninst;
   const char* rg_name;
   const char* ms_name;
   const char* ah_name;
