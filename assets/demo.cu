@@ -45,21 +45,37 @@ void write_attm(uint32_t color) {
   cfg.framebuf[get_invoke_idx()] = color;
 }
 
-/*
-// Get a orthogonal projected ray for this raygen shader invocation. The NDC
-// coordinates range from -1 to 1.
+// Get a orthogonally projected ray for this raygen shader invocation.
 SHADER_FN
-float3 ortho_ray(const Transform& trans) {
-  auto ndc_coord();
+Ray ortho_ray(
+  float3 o = {},
+  float3 right = { 1, 0, 0 },
+  float3 up = { 0, 1, 0 }
+) {
+  float3 front = normalize(cross(right, up));
+  float2 uv = get_film_coord();
+  o += uv.x * right + uv.y * up;
+  return Ray { o, front };
 }
-*/
 
 // Get a perspectively projected ray for this raygen shader invocation, from the
 // origin of the current coordinate system. The default value is the film
 // distance forming 90 degree between the left-most and right-most ray.
+//
+// NOTE: The `right` and `up` parameters' magnitude CAN be used to set up aspect
+// ratios.
 SHADER_FN
-Ray perspect_ray(float3 o = {}, float film_z = 0.7071f) {
-  return Ray { o, normalize(make_float3(get_film_coord(), film_z)) };
+Ray perspect_ray(
+  float3 o = {},
+  float3 right = { 1, 0, 0 },
+  float3 up = { 0, 1, 0 },
+  // By default we look at objects from positive-Z to negative-Z in RHS.
+  float film_z = 0.7071f
+) {
+  float3 front = normalize(cross(right, up));
+  float2 uv = get_film_coord();
+  float3 v = normalize(uv.x * right + uv.y * up + film_z * front);
+  return Ray { o, v };
 }
 
 SHADER_MAIN
@@ -96,7 +112,7 @@ void __raygen__() {
     0, 1, 0, wColor[0], wColor[1]);
 
   write_attm(color);
-  //write_attm(color_encode_n1p1(make_float3(get_film_coord(), 1.0)));
+  //write_attm(color_encode_n1p1(ray.o));
 }
 
 }
