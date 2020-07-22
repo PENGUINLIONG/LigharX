@@ -289,12 +289,6 @@ struct Transaction {
 
 namespace type_traits {
 
-template<typename TCont, typename TElem = typename TCont::value_type>
-constexpr bool is_buffer_container_v = !std::is_trivially_copyable_v<TCont> &
-  std::is_same_v<decltype(TCont::size()), size_t> &
-  std::is_trivially_copyable_v<TElem> &
-  !std::is_pointer_v<decltype(TCont::data)>;
-
 template<typename T>
 constexpr bool is_buffer_object_v = std::is_trivially_copyable_v<T> &
   !std::is_pointer_v<T>;

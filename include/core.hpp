@@ -53,13 +53,6 @@ extern void upload_mem(
 );
 // Upload structured data to CUDA device memory.`dst` MUST be able to contain an
 // entire copy of content of `src`.
-template<typename TCont, typename TElem = typename TCont::value_type,
-  typename _ = std::enable_if<type_traits::is_buffer_container_v<TCont>>>
-  void upload_mem(const TCont& src, const DeviceMemorySlice& dst) {
-  upload_mem(src.data(), dst, sizeof(TElem) * src.size());
-}
-// Upload structured data to CUDA device memory.`dst` MUST be able to contain an
-// entire copy of content of `src`.
 template<typename T,
   typename _ = std::enable_if<type_traits::is_buffer_object_v<T>>>
   void upload_mem(const T& src, const DeviceMemorySlice& dst) {
@@ -68,13 +61,6 @@ template<typename T,
 // Download data from CUDA device memory. If the `size` of `dst` is shoter than
 // the `src`, a truncated copy of `src` is downloaded.
 extern void download_mem(const DeviceMemorySlice& src, void* dst, size_t size);
-// Download structured data from CUDA device memory. If the size of `dst` is
-// smaller than the `src`, a truncated copy of `src` is downloaded.
-template<typename TCont, typename TElem = typename TCont::value_type,
-  typename _ = std::enable_if<type_traits::is_buffer_container_v<TCont>>>
-  void download_mem(const DeviceMemorySlice& src, TCont& dst) {
-  download_mem(src, dst.data(), sizeof(TElem) * dst.size());
-}
 // Download data from CUDA device memory. If the size of `dst` if smaller than
 // the `src`, a truncated copy of `src` is downloaded.
 template<typename T,
@@ -85,13 +71,6 @@ template<typename T,
 // Copy a slice of host memory to a new memory allocation on a device. The
 // memory can be accessed globally by multiple streams.
 extern DeviceMemory shadow_mem(const void* buf, size_t size, size_t align);
-// Copy the content of `buf` to a new memory allocation on a device. The memory
-// can be accessed globally by multiple streams.
-template<typename TCont, typename TElem = typename TCont::value_type,
-  typename _ = std::enable_if<type_traits::is_buffer_container_v<TCont>>>
-  DeviceMemory shadow_mem(const TCont& buf, size_t align = 1) {
-  return shadow_mem(buf.data(), sizeof(TElem) * buf.size(), align);
-}
 template<typename T,
   typename _ = std::enable_if<type_traits::is_buffer_object_v<T>>>
   DeviceMemory shadow_mem(const T& buf, size_t align = 1) {
