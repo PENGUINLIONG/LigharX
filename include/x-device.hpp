@@ -78,7 +78,8 @@ Ray ortho_ray(
   const Transform& trans
 ) {
   auto cam_coord = make_cam_coord(trans);
-  float3 front = normalize(cross(cam_coord.right, cam_coord.up));
+  // Let the rays shoot into the screen.
+  float3 front = normalize(cross(cam_coord.up, cam_coord.right));
   float2 uv = get_film_coord();
   cam_coord.o += uv.x * cam_coord.right + uv.y * cam_coord.up;
   return Ray { cam_coord.o, front };
@@ -97,7 +98,7 @@ Ray perspect_ray(
   float film_z = 0.7071f
 ) {
   auto cam_coord = make_cam_coord(trans);
-  float3 front = normalize(cross(cam_coord.right, cam_coord.up));
+  float3 front = normalize(cross(cam_coord.up, cam_coord.right));
   float2 uv = get_film_coord();
   float3 v = normalize(uv.x * cam_coord.right + uv.y * cam_coord.up +
     film_z * front);

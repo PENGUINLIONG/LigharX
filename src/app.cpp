@@ -188,19 +188,19 @@ int main() {
 
     /* Cube 1 */ {
       auto trans = Transform()
-        .translate(-1, -0.75, 0);
+        .translate(-1, 0.75, 0);
       add_scene_sobj(scene, sobjs[0], trans, DeviceMemorySlice {});
     }
     /* Cube 2 */ {
       auto trans = Transform()
-        .translate(0, 1, 0.25)
-        .rotate(normalize(make_float3(1, -1, 0)), deg2rad(-15))
-        .translate(0.75, 0, 0);
+        .translate(-0.75, 0, 0)
+        .rotate(normalize(make_float3(1, 1, 0)), deg2rad(-15))
+        .translate(0, 0.75, 1.75);
       add_scene_sobj(scene, sobjs[0], trans, DeviceMemorySlice {});
     }
     /* Cube 3 */ {
       auto trans = Transform()
-        .translate(-1, 0.75, 0);
+        .translate(-1, -0.75, 0);
       add_scene_sobj(scene, sobjs[0], trans, DeviceMemorySlice {});
     }
     
@@ -227,7 +227,7 @@ int main() {
 
     /* Environment material */ {
       env = mat::create_mat(env_ty);
-      const float3 ambient = unquant_unorm8_rgb(50, 50, 50);
+      const float3 ambient = unquant_unorm8_rgb(250, 250, 250);
       mat::assign_mat_entry(env_ty, env, "ambient", &ambient, sizeof(ambient));
       auto env_slice = ext::slice_naive_pipe_env(pipe, pipe_data);
       upload_mem(env.data, env_slice, env.size);

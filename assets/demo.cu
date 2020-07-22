@@ -52,7 +52,7 @@ void __closesthit__() {
   float2 bary = optixGetTriangleBarycentrics();
   auto norm = normalize(cross(tri[2] - tri[0], tri[1] - tri[0]));
   norm = optixTransformNormalFromObjectToWorldSpace(norm);
-  auto refl_v = -reflect(norm, optixGetWorldRayDirection());
+  auto refl_v = -reflect(optixGetWorldRayDirection(), norm);
   refl_v = normalize(refl_v);
 
   auto p = bary.x * tri[0] + bary.y * tri[1] +
@@ -81,16 +81,17 @@ void __miss__() {
 SHADER_MAIN
 void __raygen__() {
   auto trans = Transform()
-    .translate(0, 0, -1)
+    .scale(0.5, 0.5, 0.5)
+    .rotate({ 0.0, 1.0, 0.0 }, deg2rad(45.0f))
     .rotate({ 1.0, 0.0, 0.0 }, deg2rad(45.0f))
-    .rotate({ 0.0, 1.0, 0.0 }, deg2rad(-45.0f))
-    .scale(2, 2, 2);
+    .translate(0, 0.5, -2)
+    .inverse();
 
   float3 color;
 
   Ray ray = ortho_ray(trans);
   RayLife<TraversalResult> life {};
-  life.ttl = 5;
+  life.ttl = 1;
 
   uint32_t wLife[] = PTR2WORDS(&life);
   while (life.ttl--) {
@@ -105,7 +106,8 @@ void __raygen__() {
   }
 
   write_attm(life.res.color);
-  //write_attm(color_encode_n1p1(ray.o));
+  //write_attm(make_float3(get_film_coord()));
+  //write_attm(color_encode_n1p1(life.res.color));
 }
 
 }

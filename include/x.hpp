@@ -79,11 +79,12 @@ constexpr float rad2deg(float deg) {
 struct Transform {
   union {
     float mat[12];
+    struct { float4 r1, r2, r3; };
     float4 rows[3];
   };
 
   X Transform() : mat { 1,0,0,0, 0,1,0,0, 0,0,1,0 } {}
-  X Transform(float4 r1, float4 r2, float4 r3) : rows{ r1, r2, r3 } {}
+  X Transform(float4 r1, float4 r2, float4 r3) : r1(r1), r2(r2), r3(r3) {}
   X Transform(float a, float b, float c, float d,
     float e, float f, float g, float h,
     float i, float j, float k, float l) : mat { a,b,c,d,e,f,g,h,i,j,k,l } {}
@@ -99,24 +100,14 @@ struct Transform {
     };
   }
   inline X Transform operator*(const Transform& rhs) const {
+    float4 c1 { rhs.mat[0], rhs.mat[4], rhs.mat[8], 0 };
+    float4 c2 { rhs.mat[1], rhs.mat[5], rhs.mat[9], 0 };
+    float4 c3 { rhs.mat[2], rhs.mat[6], rhs.mat[10], 0 };
+    float4 c4 { rhs.mat[3], rhs.mat[7], rhs.mat[11], 1 };
     return Transform {
-      mat[0] * rhs.mat[0] + mat[1] * rhs.mat[4] + mat[2] * rhs.mat[8],
-      mat[0] * rhs.mat[1] + mat[1] * rhs.mat[5] + mat[2] * rhs.mat[9],
-      mat[0] * rhs.mat[2] + mat[1] * rhs.mat[6] + mat[2] * rhs.mat[10],
-      mat[0] * rhs.mat[3] + mat[1] * rhs.mat[7] + mat[2] * rhs.mat[11]
-        + mat[3],
-
-      mat[4] * rhs.mat[0] + mat[5] * rhs.mat[4] + mat[6] * rhs.mat[8],
-      mat[4] * rhs.mat[1] + mat[5] * rhs.mat[5] + mat[6] * rhs.mat[9],
-      mat[4] * rhs.mat[2] + mat[5] * rhs.mat[6] + mat[6] * rhs.mat[10],
-      mat[4] * rhs.mat[3] + mat[5] * rhs.mat[7] + mat[6] * rhs.mat[11]
-        + mat[7],
-
-      mat[8] * rhs.mat[0] + mat[9] * rhs.mat[4] + mat[10] * rhs.mat[8],
-      mat[8] * rhs.mat[1] + mat[9] * rhs.mat[5] + mat[10] * rhs.mat[9],
-      mat[8] * rhs.mat[2] + mat[9] * rhs.mat[6] + mat[10] * rhs.mat[10],
-      mat[8] * rhs.mat[3] + mat[9] * rhs.mat[7] + mat[10] * rhs.mat[11]
-        + mat[11],
+      dot(r1, c1), dot(r1, c2), dot(r1, c3), dot(r1, c4),
+      dot(r2, c1), dot(r2, c2), dot(r2, c3), dot(r2, c4),
+      dot(r3, c1), dot(r3, c2), dot(r3, c3), dot(r3, c4),
     };
   }
   inline X Transform scale(float x, float y, float z) const {
@@ -132,9 +123,9 @@ struct Transform {
     return translate(v.x, v.y, v.z);
   }
   inline X Transform rotate(float x, float y, float z, float rad) const {
-    auto sin = std::sinf(rad);
-    auto cos = std::cosf(rad);
-    auto rcos = 1.0f - cos;
+    float sin = std::sinf(rad);
+    float cos = std::cosf(rad);
+    float rcos = 1.0f - cos;
     return Transform {
         cos + rcos * x * x, rcos * x * y - sin * z, rcos * x * z + sin * y, 0,
         rcos * y * x + sin * z, cos + rcos * y * y, rcos * y * z - sin * x, 0,
@@ -145,28 +136,33 @@ struct Transform {
     return rotate(axis.x, axis.y, axis.z, rad);
   }
   inline X Transform inverse() const {
-    auto det = mat[0] * mat[5] * mat[10] -
-      mat[0] * mat[6] * mat[9] -
-      mat[4] * mat[1] * mat[10] +
-      mat[4] * mat[2] * mat[9] +
-      mat[8] * mat[1] * mat[6] -
-      mat[8] * mat[2] * mat[5];
-    return Transform {
-      (mat[5] * mat[10] - mat[9] * mat[6]) / det,
-      (mat[2] * mat[9] - mat[1] * mat[10]) / det,
-      (mat[1] * mat[10] - mat[2] * mat[5]) / det,
-      -mat[3],
-
-      (mat[6] * mat[8] - mat[4] * mat[10]) / det,
-      (mat[0] * mat[10] - mat[2] * mat[8]) / det,
-      (mat[4] * mat[6] - mat[0] * mat[6]) / det,
-      -mat[7],
-
-      (mat[4] * mat[9] - mat[5] * mat[8]) / det,
-      (mat[1] * mat[8] - mat[0] * mat[9]) / det,
-      (mat[0] * mat[5] - mat[4] * mat[1]) / det,
-      -mat[11]
+    float det {
+      r1.x * (r2.y * r3.z - r2.z * r3.y) -
+      r2.x * (r1.y * r3.z - r1.z * r3.y) +
+      r3.x * (r1.y * r2.z - r1.z * r2.y)
     };
+    float4 r1_ {
+      (r2.y * r3.z - r3.y * r2.z) / det,
+      (r1.z * r3.y - r1.y * r3.z) / det,
+      (r1.y * r2.z - r1.z * r2.y) / det,
+      (-r1.y * r2.z * r3.w - r1.z * r2.w * r3.y - r1.w * r2.y * r3.z +
+        r1.w * r2.z * r3.y + r1.z * r2.y * r3.w + r1.y * r2.w * r3.z) / det,
+    };
+    float4 r2_ {
+      (r2.z * r3.x - r2.x * r3.z) / det,
+      (r1.x * r3.z - r1.z * r3.x) / det,
+      (r2.x * r1.z - r1.x * r2.z) / det,
+      (r1.x * r2.z * r3.w + r1.z * r2.w * r3.x + r1.w * r2.x * r3.z -
+        r1.w * r2.z * r3.x - r1.z * r2.x * r3.w - r1.x * r2.w * r3.z) / det,
+    };
+    float4 r3_ {
+      (r2.x * r3.y - r2.y * r3.x) / det,
+      (r1.y * r3.x - r1.x * r3.y) / det,
+      (r1.x * r2.y - r2.x * r1.y) / det,
+      (-r1.x * r2.y * r3.w - r1.y * r2.w * r3.x - r1.w * r2.x * r3.y +
+        r1.w * r2.y * r3.x + r1.y * r2.x * r3.w + r1.x * r2.w * r3.y) / det,
+    };
+    return Transform { r1_, r2_, r3_ };
   }
 };
 static_assert(sizeof(Transform) == sizeof(float[12]),
