@@ -14,7 +14,11 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PROJECT_SOURCE_DIR}/cmake")
 
 find_package(CUDA REQUIRED)
 find_package(OptiX REQUIRED VERSION 7.0)
-find_package(Assimp REQUIRED)
+find_package(Assimp)
+
+if(assimp_FOUND)
+    add_definitions(-DL_USE_ASSIMP=1)
+endif()
 
 # Build the OptixLab.
 include_directories(

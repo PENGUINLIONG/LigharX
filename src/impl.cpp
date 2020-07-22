@@ -950,6 +950,7 @@ Pipeline create_naive_pipe(
 
 
 std::vector<Mesh> import_meshes_from_file(const char* path) {
+#ifdef L_USE_ASSIMP
   const aiScene* raw_scene = aiImportFile(
     path,
     aiProcess_Triangulate |
@@ -992,6 +993,9 @@ std::vector<Mesh> import_meshes_from_file(const char* path) {
   }
   aiReleaseImport(raw_scene);
   return mesh;
+#else
+  throw std::logic_error("assimp must be linked to use this function");
+#endif // L_USE_ASSIMP
 }
 
 

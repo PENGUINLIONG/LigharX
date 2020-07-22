@@ -2,9 +2,11 @@
 // Extensions to core functionalities.
 // @PENGUINLIONG
 #include <functional>
+#ifdef L_USE_ASSIMP
 #include <assimp/cimport.h>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
+#endif // L_USE_ASSIMP
 #include "core.hpp"
 
 namespace liong {
