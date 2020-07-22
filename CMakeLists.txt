@@ -25,10 +25,7 @@ include_directories(
 )
 file(GLOB SRCS "${PROJECT_SOURCE_DIR}/src/*")
 file(GLOB INCS "${PROJECT_SOURCE_DIR}/include/*")
-add_executable(OptixLab ${SRCS} ${INCS})
-
-include_directories("${PROJECT_SOURCE_DIR}/assets")
-add_subdirectory("${PROJECT_SOURCE_DIR}/assets")
+add_library(OptixLab ${SRCS} ${INCS})
 
 # Link things up.
 target_link_libraries(
@@ -37,3 +34,5 @@ target_link_libraries(
     ${CUDA_CUDA_LIBRARY}
     ${ASSIMP_LIBRARY}
 )
+
+add_subdirectory("${PROJECT_SOURCE_DIR}/examples")
