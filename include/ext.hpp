@@ -24,6 +24,12 @@ Pipeline create_naive_pipe(
   const NaivePipelineConfig& naive_pipe_cfg
 );
 
+inline DeviceMemorySlice slice_naive_pipe_ray_prop(
+  const Pipeline& pipe,
+  const PipelineData& pipe_data
+) {
+  return slice_pipe_data(pipe, pipe_data, OPTIX_PROGRAM_GROUP_KIND_RAYGEN, 0);
+}
 inline DeviceMemorySlice slice_naive_pipe_mat(
   const Pipeline& pipe,
   const PipelineData& pipe_data,

@@ -315,7 +315,11 @@ struct NaivePipelineConfig {
   const char* ms_name;
   const char* ah_name;
   const char* ch_name;
-  // Size of Environment material to be allocated. this material will be
+  // Size of Ray property material to be allocated. This material will be
+  // accessible in the raygen stage of the pipeline, by the base address
+  // returned from `optixGetSbtDataPointer`.
+  size_t ray_prop_size;
+  // Size of Environment material to be allocated. This material will be
   // accessible in the miss stage of the pipeline, by the base address returned
   // from `optixGetSbtDataPointer`.
   size_t env_size;

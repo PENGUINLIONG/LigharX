@@ -30,6 +30,7 @@ template<size_t TTravDepth>
 Pipeline l_create_naive_pipe(
   const Context& ctxt,
   const std::vector<char>& ptx,
+  const mat::MaterialType& ray_prop,
   const mat::MaterialType& env,
   const mat::MaterialType& mat
 ) {
@@ -43,6 +44,7 @@ Pipeline l_create_naive_pipe(
   naive_pipe_cfg.ms_name = "__miss__";
   naive_pipe_cfg.ch_name = "__closesthit__";
   naive_pipe_cfg.ah_name = "__anyhit__";
+  naive_pipe_cfg.ray_prop_size = ray_prop.size;
   naive_pipe_cfg.env_size = env.size;
   naive_pipe_cfg.mat_size = mat.size;
   naive_pipe_cfg.trace_depth = TTravDepth;
@@ -162,6 +164,7 @@ int main() {
   Transaction transact;
 
   // Define materials.
+  mat::MaterialType ray_prop_ty {};
   mat::MaterialType env_ty {};
   mat::push_mat_ty_entry(env_ty, "ambient", sizeof(float3));
   mat::MaterialType mat_ty {};
@@ -175,7 +178,7 @@ int main() {
     ctxt = create_ctxt();
     {
       auto ptx = ext::read_ptx("../assets/cuda_compile_ptx_1_generated_demo.cu.ptx");
-      pipe = l_create_naive_pipe<2>(ctxt, ptx, env_ty, mat_ty);
+      pipe = l_create_naive_pipe<2>(ctxt, ptx, ray_prop_ty, env_ty, mat_ty);
     }
     framebuf = create_framebuf(256, 256);
     //meshes = ext::import_meshes_from_file("./untitled.obj");

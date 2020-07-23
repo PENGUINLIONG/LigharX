@@ -928,7 +928,7 @@ Pipeline create_naive_pipe(
   pipe_cfg.rg_cfg = {
     PipelineStageConfig {
       naive_pipe_cfg.rg_name,
-      0
+      naive_pipe_cfg.ray_prop_size,
     }
   };
   pipe_cfg.ms_cfgs = {
