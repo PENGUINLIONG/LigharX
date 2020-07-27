@@ -36,8 +36,14 @@ namespace liong {
 constexpr float4 make_pt(float x, float y, float z) {
   return float4{ x, y, z, 1.0f };
 }
+constexpr float4 make_pt(float3 v) {
+  return float4{ v.x, v.y, v.z, 1.0f };
+}
 constexpr float4 make_vec(float x, float y, float z) {
   return float4{ x, y, z, 0.0f };
+}
+constexpr float4 make_vec(float3 v) {
+  return float4{ v.x, v.y, v.z, 0.0f };
 }
 X uint32_t pack_unorm4_abgr(float4 x) {
   x = clamp(x, 0, 1);
@@ -76,6 +82,7 @@ constexpr float rad2deg(float deg) {
 }
 
 // An 3x4 (float32) matrix transform.
+// All the transform that involves unit vectors MUST be normalized externally.
 struct Transform {
   union {
     float mat[12];
@@ -110,6 +117,21 @@ struct Transform {
       dot(r3, c1), dot(r3, c2), dot(r3, c3), dot(r3, c4),
     };
   }
+  inline X float3 apply_vec(const float3& rhs) {
+    return float3 {
+      dot(make_float3(rows[0]), rhs),
+      dot(make_float3(rows[1]), rhs),
+      dot(make_float3(rows[2]), rhs),
+    };
+  }
+  inline X float3 apply_pt(const float3& rhs) {
+    return float3 {
+      dot(rows[0], make_float4(rhs, 1.0f)),
+      dot(rows[1], make_float4(rhs, 1.0f)),
+      dot(rows[2], make_float4(rhs, 1.0f))
+    };
+  }
+
   inline X Transform scale(float x, float y, float z) const {
     return Transform { x,0,0,0, 0,y,0,0, 0,0,z,0 } *(*this);
   }
@@ -134,6 +156,11 @@ struct Transform {
   }
   inline X Transform rotate(float3 axis, float rad) const {
     return rotate(axis.x, axis.y, axis.z, rad);
+  }
+  inline X Transform rotate_vec2vec(float3 from, float3 to) const {
+    auto axis = normalize(cross(from, to));
+    auto rad = std::acos(dot(from, to));
+    return rotate(axis, rad);
   }
   inline X Transform inverse() const {
     float det {

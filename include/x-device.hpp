@@ -9,7 +9,7 @@ static_assert(false, "cannot include device-only header file in host code.");
 namespace liong {
 
 //
-// # Predefined Launch Configuration
+// ## Predefined Launch Configuration
 //
 // Because the configuration is DEFINED here in the header file, you have to
 // write all the stages in the same `.cu` source, otherwise you would get some
@@ -22,27 +22,57 @@ LaunchConfig cfg;
 
 
 //
-// # Predefined Types
+// ## Predefined Types
 //
 
 struct Ray {
   float3 o;
   float3 v;
 };
+// Everything valuable during the lifetime of a ray.
+template<typename TRes>
+struct RayLife {
+  Ray ray;
+  // Time-to-live. The number of remaining chances to launch traversal without
+  // blasting the stack memory. It SHOULD be decresed before another traversal
+  // and SHOULD be set to 0 on a miss.
+  uint32_t ttl;
+  // User-defined result data.
+  TRes res;
+};
 
 
 
 //
-// # Raygen and Scheduling Utilities
+// ## Material Access
+//
+
+#define GET_SBT(T)                                                             \
+  (*(T*)optixGetSbtDataPointer())
+#define GET_PAYLOAD(TRes)                                                      \
+  (*(RayLife<TRes>*)WORDS2PTR(optixGetPayload_0(), optixGetPayload_1()))
+
+//
+// ## Raygen and Scheduling Utilities
 //
 
 SHADER_FN
-float2 get_film_coord() {
+float2 get_film_coord_n1p1() {
   uint3 launch_idx = optixGetLaunchIndex();
   auto x = ((float)(launch_idx.x) * 2 + 1 - cfg.launch_size.x) /
-      cfg.launch_size.x;
+    cfg.launch_size.x;
   auto y = ((float)(launch_idx.y) * 2 + 1 - cfg.launch_size.y) /
-      cfg.launch_size.y;
+    cfg.launch_size.y;
+  auto rel_pos = make_float2(x, y);
+  return rel_pos;
+}
+SHADER_FN
+float2 get_film_coord_0p1() {
+  uint3 launch_idx = optixGetLaunchIndex();
+  auto x = ((float)(launch_idx.x) * 2 + 1) /
+    (2 * cfg.launch_size.x);
+  auto y = ((float)(launch_idx.y) * 2 + 1) /
+    (2 * cfg.launch_size.y);
   auto rel_pos = make_float2(x, y);
   return rel_pos;
 }
@@ -53,7 +83,11 @@ uint32_t get_invoke_idx() {
       launch_idx.x;
 }
 SHADER_FN
-void write_attm(float3 color) {
+void write_attm_n1p1(float3 color) {
+  cfg.framebuf[get_invoke_idx()] = color_encode_n1p1(color);
+}
+SHADER_FN
+void write_attm_0p1(float3 color) {
   cfg.framebuf[get_invoke_idx()] = color_encode_0p1(color);
 }
 SHADER_FN
@@ -80,7 +114,7 @@ Ray ortho_ray(
   auto cam_coord = make_cam_coord(trans);
   // Let the rays shoot into the screen.
   float3 front = normalize(cross(cam_coord.up, cam_coord.right));
-  float2 uv = get_film_coord();
+  float2 uv = get_film_coord_n1p1();
   cam_coord.o += uv.x * cam_coord.right + uv.y * cam_coord.up;
   return Ray { cam_coord.o, front };
 }
@@ -99,7 +133,7 @@ Ray perspect_ray(
 ) {
   auto cam_coord = make_cam_coord(trans);
   float3 front = normalize(cross(cam_coord.up, cam_coord.right));
-  float2 uv = get_film_coord();
+  float2 uv = get_film_coord_n1p1();
   float3 v = normalize(uv.x * cam_coord.right + uv.y * cam_coord.up +
     film_z * front);
   return Ray { cam_coord.o, v };
@@ -107,8 +141,19 @@ Ray perspect_ray(
 
 
 
+#define TRAVERSE(trav, life, ray_flags)                                        \
+{                                                                              \
+uint32_t wLife[] = PTR2WORDS(&life);                                           \
+optixTrace(trav, life.ray.o, life.ray.v,                                       \
+  1e-5f, 1e20f, 0.0f, OptixVisibilityMask(255),                                \
+  ray_flags,                                                                   \
+  0, 1, 0, wLife[0], wLife[1]);                                                \
+}
+
+
+
 //
-// Sampling utilities.
+// ## Sampling Utilities
 //
 
 // Standard even-spacing sampling utilities.

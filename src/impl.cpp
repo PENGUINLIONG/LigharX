@@ -456,6 +456,18 @@ DeviceMemorySlice slice_pipe_data(
 }
 
 
+
+Framebuffer create_imgless_framebuf(
+  uint32_t width,
+  uint32_t height,
+  uint32_t depth
+) {
+  ASSERT << ((width != 0) && (height != 0) && (depth != 0))
+    << "framebuffer size cannot be zero";
+  liong::log::info("created imageless framebuffer (width=", width, ", height=",
+    height, ", depth=", depth, ")");
+  return Framebuffer { width, height, depth, {} };
+}
 Framebuffer create_framebuf(uint32_t width, uint32_t height, uint32_t depth) {
   ASSERT << ((width != 0) && (height != 0) && (depth != 0))
     << "framebuffer size cannot be zero";
@@ -465,7 +477,9 @@ Framebuffer create_framebuf(uint32_t width, uint32_t height, uint32_t depth) {
   return Framebuffer { width, height, depth, framebuf_devmem };
 }
 void destroy_framebuf(Framebuffer& framebuf) {
-  free_mem(framebuf.framebuf_devmem);
+  if (framebuf.framebuf_devmem.alloc_base) {
+    free_mem(framebuf.framebuf_devmem);
+  }
   framebuf = {};
   liong::log::info("destroyed framebuffer");
 }
@@ -506,6 +520,7 @@ void snapshot_framebuf(const Framebuffer& framebuf, const char* path) {
   f.write(hostmem, hostmem_size);
   delete[] hostmem;
   f.close();
+  liong::log::info("took snapshot to file: ", path);
 }
 
 Mesh create_mesh(const MeshConfig& mesh_cfg) {
@@ -526,7 +541,8 @@ Mesh create_mesh(const MeshConfig& mesh_cfg) {
     << "triangle index buffer size cannot be zero";
 
   auto alloc_size = pretrans_offset + pretrans_size;
-  auto devmem = alloc_mem(alloc_size);
+  auto devmem = alloc_mem(alloc_size,
+    std::max(L_OPTIMAL_DEVMEM_ALIGN, OPTIX_GEOMETRY_TRANSFORM_BYTE_ALIGNMENT));
 
   auto vert_slice = devmem.slice(vert_buf_offset, vert_buf_size);
   auto idx_slice = devmem.slice(idx_buf_offset, idx_buf_size);
@@ -545,10 +561,10 @@ Mesh create_mesh(const MeshConfig& mesh_cfg) {
   build_in.triangleArray.indexFormat = mesh_cfg.idx_fmt;
   build_in.triangleArray.numIndexTriplets = mesh_cfg.ntri;
   build_in.triangleArray.indexStrideInBytes = mesh_cfg.tri_stride;
-  //build_in.triangleArray.preTransform = pretrans_slice.ptr;
-  //build_in.triangleArray.transformFormat =
-  //  OPTIX_TRANSFORM_FORMAT_MATRIX_FLOAT12;
-  build_in.triangleArray.transformFormat = OPTIX_TRANSFORM_FORMAT_NONE;
+  build_in.triangleArray.preTransform = pretrans_slice.ptr;
+  build_in.triangleArray.transformFormat =
+    OPTIX_TRANSFORM_FORMAT_MATRIX_FLOAT12;
+  //build_in.triangleArray.transformFormat = OPTIX_TRANSFORM_FORMAT_NONE;
   build_in.triangleArray.flags = new uint32_t[1] {};
   build_in.triangleArray.numSbtRecords = 1;
 
@@ -696,7 +712,7 @@ void cmd_traverse(
     trav,
     reinterpret_cast<uint32_t*>(framebuf.framebuf_devmem.ptr)
   };
-  DeviceMemory lparam_devmem = shadow_mem(lparam);
+  DeviceMemory lparam_devmem = shadow_mem(&lparam, sizeof(LaunchConfig));
 
   OPTIX_ASSERT << optixLaunch(pipe.pipe, transact.stream, lparam_devmem.ptr,
     lparam_devmem.size, &pipe_data.sbt, framebuf.width, framebuf.height, 1);

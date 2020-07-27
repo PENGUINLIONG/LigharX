@@ -51,31 +51,12 @@ extern void upload_mem(
   const DeviceMemorySlice& dst,
   size_t size
 );
-// Upload structured data to CUDA device memory.`dst` MUST be able to contain an
-// entire copy of content of `src`.
-template<typename T,
-  typename _ = std::enable_if<type_traits::is_buffer_object_v<T>>>
-  void upload_mem(const T& src, const DeviceMemorySlice& dst) {
-  upload_mem(&src, dst, sizeof(T));
-}
 // Download data from CUDA device memory. If the `size` of `dst` is shoter than
 // the `src`, a truncated copy of `src` is downloaded.
 extern void download_mem(const DeviceMemorySlice& src, void* dst, size_t size);
-// Download data from CUDA device memory. If the size of `dst` if smaller than
-// the `src`, a truncated copy of `src` is downloaded.
-template<typename T,
-  typename _ = std::enable_if<type_traits::is_buffer_object_v<T>>>
-  void download_mem(const DeviceMemorySlice& src, T& dst) {
-  download_mem(src, &dst, sizeof(T));
-}
 // Copy a slice of host memory to a new memory allocation on a device. The
 // memory can be accessed globally by multiple streams.
-extern DeviceMemory shadow_mem(const void* buf, size_t size, size_t align);
-template<typename T,
-  typename _ = std::enable_if<type_traits::is_buffer_object_v<T>>>
-  DeviceMemory shadow_mem(const T& buf, size_t align = 1) {
-  return shadow_mem(&buf, sizeof(T), align);
-}
+extern DeviceMemory shadow_mem(const void* buf, size_t size, size_t align = 1);
 
 
 
@@ -105,13 +86,19 @@ extern DeviceMemorySlice slice_pipe_data(
 );
 
 
-
-extern Framebuffer create_framebuf(uint32_t w, uint32_t h, uint32_t d = 1);
+extern Framebuffer create_imgless_framebuf(
+  uint32_t weight,
+  uint32_t height = 1,
+  uint32_t depth = 1
+);
+extern Framebuffer create_framebuf(
+  uint32_t width,
+  uint32_t height = 1,
+  uint32_t d = 1
+);
 extern void destroy_framebuf(Framebuffer& framebuf);
 // Take a snapshot of the framebuffer content and write it to a BMP file.
 //
-// NOTE: Usual image app might not be able to read such 32-bit alpha-enabled
-//       BMP but modern browsers seems supporting, at least on Firefox.
 // WARNING: This only works properly on little-endian platforms.
 extern void snapshot_framebuf(const Framebuffer& framebuf, const char* path);
 
@@ -230,9 +217,10 @@ void cmd_traverse(
 ) {
   cmd_traverse(transact, pipe, pipe_data, framebuf, sobj.inner->trav);
 }
-// Initialize `PipelineData` layout. An uninitialized `PipelineData` cannot be
+// Initialize `PipelineData` layout. An uninitialized `PipelineData` CANNOT be
 // correctly bound by its user pipeline and scheduling pipeline execution with
-// invalid data will lead to undefined behavior.
+// invalid data will lead to undefined behavior. The user code MUST also upload
+// SBT data AFTER the initialization.
 void cmd_init_pipe_data(
   Transaction& transact,
   const Pipeline& pipe,
