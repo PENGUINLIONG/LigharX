@@ -1,12 +1,12 @@
 #pragma once
-// Core functionalities of OptixLab.
+// Core functionalities of LigharX.
 // @PENGUINLIONG
 #include "x.hpp"
 #include "ty.hpp"
 
 namespace liong {
 
-// Initialize core functionalities of OptixLab.
+// Initialize core functionalities of LigharX.
 extern void initialize();
 
 

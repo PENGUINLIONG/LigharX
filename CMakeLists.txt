@@ -1,6 +1,6 @@
 ﻿cmake_minimum_required (VERSION 3.12)
 
-project ("OptixLab" LANGUAGES CXX CUDA)
+project ("LigharX" LANGUAGES CXX CUDA)
 
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -20,7 +20,7 @@ if(assimp_FOUND)
     add_definitions(-DL_USE_ASSIMP=1)
 endif()
 
-# Build the OptixLab.
+# Build the LigharX.
 include_directories(
     "${PROJECT_SOURCE_DIR}/include"
     ${OptiX_INCLUDE}
@@ -29,11 +29,11 @@ include_directories(
 )
 file(GLOB SRCS "${PROJECT_SOURCE_DIR}/src/*")
 file(GLOB INCS "${PROJECT_SOURCE_DIR}/include/*")
-add_library(OptixLab ${SRCS} ${INCS})
+add_library(LigharX ${SRCS} ${INCS})
 
 # Link things up.
 target_link_libraries(
-    OptixLab
+    LigharX
     ${CUDA_LIBRARIES}
     ${CUDA_CUDA_LIBRARY}
     ${ASSIMP_LIBRARY}

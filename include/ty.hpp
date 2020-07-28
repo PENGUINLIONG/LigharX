@@ -1,5 +1,5 @@
 #pragma once
-// OptixLab types.
+// LigharX types.
 // @PENGUINLIONG
 #include <vector>
 #include "x.hpp"
