@@ -100,6 +100,27 @@ inline void cmd_build_sobjs(
   }
 }
 
+
+
+// Take a snapshot of the device memory content and write it to a Binary file.
+// The binary data will follow a header section.
+//
+// WARNING: Be aware of endianess.
+extern void snapshot_devmem(
+  const DeviceMemorySlice& devmem,
+  const void* head,
+  size_t head_size,
+  const char* path
+);
+// Take a snapshot of the device memory content and write it to a Binary file.
+//
+// WARNING: Be aware of endianess.
+extern void snapshot_devmem(const DeviceMemorySlice& devmem, const char* path);
+// Take a snapshot of the framebuffer content and write it to a BMP file.
+//
+// WARNING: This only works properly on little-endian platforms.
+extern void snapshot_framebuf(const Framebuffer& framebuf, const char* path);
+
 } // namespace ext
 
 } // namespace liong

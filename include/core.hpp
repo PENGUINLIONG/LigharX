@@ -97,10 +97,6 @@ extern Framebuffer create_framebuf(
   uint32_t d = 1
 );
 extern void destroy_framebuf(Framebuffer& framebuf);
-// Take a snapshot of the framebuffer content and write it to a BMP file.
-//
-// WARNING: This only works properly on little-endian platforms.
-extern void snapshot_framebuf(const Framebuffer& framebuf, const char* path);
 
 
 

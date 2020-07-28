@@ -483,45 +483,6 @@ void destroy_framebuf(Framebuffer& framebuf) {
   framebuf = {};
   liong::log::info("destroyed framebuffer");
 }
-void snapshot_framebuf(const Framebuffer& framebuf, const char* path) {
-  std::fstream f(path, std::ios::out | std::ios::binary);
-  f.write("BM", 2);
-  ASSERT << (framebuf.depth == 1)
-    << "cannot take snapshot of 3d framebuffer";
-  uint32_t img_size = framebuf.framebuf_devmem.size;
-  uint32_t bmfile_hdr[] = { 14 + 108 + img_size, 0, 14 + 108 };
-  f.write((const char*)bmfile_hdr, sizeof(bmfile_hdr));
-  uint32_t bmcore_hdr[] = {
-    108, // Size of header, here we use `BITMAPINFOHEADER`.
-    framebuf.width,
-    framebuf.height,
-    1 | // Number of color planes.
-    (32 << 16), // Bits per pixel.
-    3, // Compression. (BI_BITFIELDS)
-    img_size, // Raw image data size.
-    2835, // Horizontal pixel per meter.
-    2835, // Vertical pixel per meter.
-    0, // (Unused) color palette count.
-    0, // (Unused) important color count.
-    0x000000FF, // Red channel mask.
-    0x0000FF00, // Green channel mask.
-    0x00FF0000, // Blue channel mask.
-    0xFF000000, // Alpha channel mask.
-    0x57696E20, // Color space. ("Win ")
-    0,0,0,0,0,0,0,0,0, // CIEXYZTRIPLE end point.
-    0, // Red gamma.
-    0, // Green gamma.
-    0, // Blue gamma.
-  };
-  f.write((const char*)bmcore_hdr, sizeof(bmcore_hdr));
-  auto hostmem_size = framebuf.framebuf_devmem.size;
-  auto hostmem = new char[hostmem_size];
-  download_mem(framebuf.framebuf_devmem, hostmem, hostmem_size);
-  f.write(hostmem, hostmem_size);
-  delete[] hostmem;
-  f.close();
-  liong::log::info("took snapshot to file: ", path);
-}
 
 Mesh create_mesh(const MeshConfig& mesh_cfg) {
   auto vert_buf_offset = 0;
@@ -1014,7 +975,64 @@ std::vector<Mesh> import_meshes_from_file(const char* path) {
 #endif // L_USE_ASSIMP
 }
 
+void snapshot_devmem(
+  const DeviceMemorySlice& devmem,
+  const void* head,
+  size_t head_size,
+  const char* path
+) {
+  std::fstream f(path, std::ios::out | std::ios::binary);
+  auto temp = std::malloc(devmem.size);
+  f.write((const char*)head, head_size);
+  download_mem(devmem, temp, devmem.size);
+  f.write((const char*)temp, devmem.size);
+  std::free(temp);
+  f.close();
+  liong::log::info("took snapshot of device memory to file: ", path);
+}
+void snapshot_devmem(const DeviceMemorySlice& devmem, const char* path) {
+  snapshot_devmem(devmem, nullptr, 0, path);
+}
+void snapshot_framebuf(const Framebuffer& framebuf, const char* path) {
+  std::fstream f(path, std::ios::out | std::ios::binary);
+  f.write("BM", 2);
+  ASSERT << (framebuf.depth == 1)
+    << "cannot take snapshot of 3d framebuffer";
+  uint32_t img_size = framebuf.framebuf_devmem.size;
+  uint32_t bmfile_hdr[] = { 14 + 108 + img_size, 0, 14 + 108 };
+  f.write((const char*)bmfile_hdr, sizeof(bmfile_hdr));
+  uint32_t bmcore_hdr[] = {
+    108, // Size of header, here we use `BITMAPINFOHEADER`.
+    framebuf.width,
+    framebuf.height,
+    1 | // Number of color planes.
+    (32 << 16), // Bits per pixel.
+    3, // Compression. (BI_BITFIELDS)
+    img_size, // Raw image data size.
+    2835, // Horizontal pixel per meter.
+    2835, // Vertical pixel per meter.
+    0, // (Unused) color palette count.
+    0, // (Unused) important color count.
+    0x000000FF, // Red channel mask.
+    0x0000FF00, // Green channel mask.
+    0x00FF0000, // Blue channel mask.
+    0xFF000000, // Alpha channel mask.
+    0x57696E20, // Color space. ("Win ")
+    0,0,0,0,0,0,0,0,0, // CIEXYZTRIPLE end point.
+    0, // Red gamma.
+    0, // Green gamma.
+    0, // Blue gamma.
+  };
+  f.write((const char*)bmcore_hdr, sizeof(bmcore_hdr));
+  auto hostmem_size = framebuf.framebuf_devmem.size;
+  auto hostmem = std::malloc(hostmem_size);
+  download_mem(framebuf.framebuf_devmem, hostmem, hostmem_size);
+  f.write((const char*)hostmem, hostmem_size);
+  std::free(hostmem);
+  f.close();
+  liong::log::info("took snapshot of framebuffer to file: ", path);
+}
 
 } // namespace ext
 
-}
+} // namespace liong
