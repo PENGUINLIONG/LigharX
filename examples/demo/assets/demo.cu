@@ -4,21 +4,6 @@
 
 namespace liong {
 
-// Everything valuable during the lifetime of a ray.
-template<typename TRes>
-struct RayLife {
-  // Point of intersection (hit).
-  float3 p;
-  // Reflected ray direction.
-  float3 refl_v;
-  // Time-to-live. The number of remaining chances to launch traversal without
-  // blasting the stack memory. It SHOULD be decresed before another traversal
-  // and SHOULD be set to 0 on a miss.
-  uint32_t ttl;
-  // User-defined result data.
-  TRes res;
-};
-
 struct Material {
   float3 albedo;
   float3 emit;
@@ -28,6 +13,11 @@ struct Environment {
   float3 ambient;
 };
 struct TraversalResult {
+  // Point of intersection (hit).
+  float3 p;
+  // Reflected ray direction.
+  float3 refl_v;
+
   float3 color;
   // Gradually decreasing in magnitude.
   float3 color_mask = { 1, 1, 1 };
@@ -35,12 +25,10 @@ struct TraversalResult {
 
 SHADER_MAIN
 void __closesthit__() {
-  const auto& mat = *(const Material*)optixGetSbtDataPointer();
+  const auto& mat = GET_SBT(Material);
+  auto& life = GET_PAYLOAD(TraversalResult);
 
   const float F0 = 0.04f;
-
-  uint32_t wLife[] = { optixGetPayload_0(), optixGetPayload_1() };
-  auto& life = *(RayLife<TraversalResult>*)WORDS2PTR(wLife[0], wLife[1]);
 
   constexpr uint32_t sbt_idx = 0;
   auto gas_trav = optixGetGASTraversableHandle();
@@ -59,8 +47,8 @@ void __closesthit__() {
     (1 - (bary.x + bary.y)) * tri[2];
   p = optixTransformPointFromObjectToWorldSpace(p);
 
-  life.refl_v = refl_v;
-  life.p = p;
+  life.ray.o = p;
+  life.ray.v = refl_v;
   life.res.color += mat.emit * life.res.color_mask;
   life.res.color_mask *= F0 * mat.albedo;
 }
@@ -71,8 +59,8 @@ void __anyhit__() {
 
 SHADER_MAIN
 void __miss__() {
-  const auto& env = *(const Environment*)optixGetSbtDataPointer();
-  auto& life = *(RayLife<TraversalResult>*)WORDS2PTR(optixGetPayload_0(), optixGetPayload_1());
+  const auto& env = GET_SBT(Environment);
+  auto& life = GET_PAYLOAD(TraversalResult);
   life.ttl = 0;
   life.res.color += env.ambient * life.res.color_mask;
 }
@@ -89,20 +77,11 @@ void __raygen__() {
 
   float3 color;
 
-  Ray ray = ortho_ray(trans);
-  RayLife<TraversalResult> life {};
-  life.ttl = 1;
+  RayLife<TraversalResult> life { ortho_ray(trans), 1, {} };
 
   uint32_t wLife[] = PTR2WORDS(&life);
   while (life.ttl--) {
-    optixTrace(cfg.trav, ray.o, ray.v,
-      1e-5f, 1e20f, 0.0f, OptixVisibilityMask(255),
-      // If you don't use it then YOU SHOULD DISABLE IT to bypass a program
-      // invocation.
-      OPTIX_RAY_FLAG_DISABLE_ANYHIT,
-      0, 1, 0, wLife[0], wLife[1]);
-    ray.o = life.p;
-    ray.v = life.refl_v;
+    TRAVERSE(cfg.trav, life, OPTIX_RAY_FLAG_DISABLE_ANYHIT);
   }
 
   write_attm(life.res.color);

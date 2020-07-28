@@ -270,7 +270,7 @@ int main() {
     cmd_traverse(transact, pipe, pipe_data, framebuf, scene);
     wait_transact(transact);
 
-    snapshot_framebuf(framebuf, "./snapshot.bmp");
+    ext::snapshot_framebuf(framebuf, "./snapshot.bmp");
 
     liong::log::info("sounds good");
   } catch (const std::exception& e) {
