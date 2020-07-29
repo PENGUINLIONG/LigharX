@@ -993,8 +993,8 @@ void snapshot_devmem(
 void snapshot_devmem(const DeviceMemorySlice& devmem, const char* path) {
   snapshot_devmem(devmem, nullptr, 0, path);
 }
-void snapshot_framebuf(const Framebuffer& framebuf, const char* path) {
-  std::fstream f(path, std::ios::out | std::ios::binary);
+
+void _snapshot_framebuf_bmp(const Framebuffer& framebuf, std::fstream& f) {
   f.write("BM", 2);
   ASSERT << (framebuf.depth == 1)
     << "cannot take snapshot of 3d framebuffer";
@@ -1029,8 +1029,48 @@ void snapshot_framebuf(const Framebuffer& framebuf, const char* path) {
   download_mem(framebuf.framebuf_devmem, hostmem, hostmem_size);
   f.write((const char*)hostmem, hostmem_size);
   std::free(hostmem);
+}
+void _snapshot_framebuf_exr(const Framebuffer& framebuf, std::fstream& f) {
+  throw std::logic_error("not implemented yet");
+}
+FramebufferSnapshotFormat infer_snapshot_fmt(const char* path) {
+  auto len = std::strlen(path);
+  auto pos = path + len;
+  auto c = '\0';
+  while (pos-- != path) {
+    c = *pos;
+    if (c == '\\' || c == '/' || c == '.') { break; }
+  }
+  if (c != '.') {
+    // There is no valid extension name for this file.
+    return L_EXT_FRAMEBUFFER_SNAPSHOT_FORMAT_AUTO;
+  }
+  pos++; // Omit the dot.
+  if (std::strcmp(pos, "bmp") == 0) { return L_EXT_FRAMEBUFFER_SNAPSHOT_FORMAT_BMP; }
+  if (std::strcmp(pos, "exr") == 0) { return L_EXT_FRAMEBUFFER_SNAPSHOT_FORMAT_EXR; }
+  return L_EXT_FRAMEBUFFER_SNAPSHOT_FORMAT_AUTO;
+}
+void snapshot_framebuf(
+  const Framebuffer& framebuf,
+  const char* path,
+  FramebufferSnapshotFormat framebuf_snapshot_fmt
+) {
+  std::fstream f(path, std::ios::out | std::ios::binary);
+  if (framebuf_snapshot_fmt == L_EXT_FRAMEBUFFER_SNAPSHOT_FORMAT_AUTO) {
+    framebuf_snapshot_fmt = infer_snapshot_fmt(path);
+  }
+  ASSERT << (framebuf_snapshot_fmt != L_EXT_FRAMEBUFFER_SNAPSHOT_FORMAT_AUTO)
+    << "cannot infer snapshot format";
+  switch (framebuf_snapshot_fmt) {
+  case L_EXT_FRAMEBUFFER_SNAPSHOT_FORMAT_BMP:
+    _snapshot_framebuf_bmp(framebuf, f);
+    break;
+  case L_EXT_FRAMEBUFFER_SNAPSHOT_FORMAT_EXR:
+    _snapshot_framebuf_exr(framebuf, f);
+    break;
+  }
   f.close();
-  liong::log::info("took snapshot of framebuffer to file: ", path);
+  liong::log::info("took snapshot of framebuffer to exr file: ", path);
 }
 
 } // namespace ext

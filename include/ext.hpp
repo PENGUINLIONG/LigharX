@@ -116,10 +116,30 @@ extern void snapshot_devmem(
 //
 // WARNING: Be aware of endianess.
 extern void snapshot_devmem(const DeviceMemorySlice& devmem, const char* path);
-// Take a snapshot of the framebuffer content and write it to a BMP file.
+
+enum FramebufferSnapshotFormat {
+  L_EXT_FRAMEBUFFER_SNAPSHOT_FORMAT_AUTO,
+  L_EXT_FRAMEBUFFER_SNAPSHOT_FORMAT_BMP,
+  L_EXT_FRAMEBUFFER_SNAPSHOT_FORMAT_EXR,
+};
+// Take a snapshot of the framebuffer content and write it to a image file.
+// Currently Lighar support 2 image file types. The output format is decided by
+// `path` extension if `snapshot_fmt` is L_EXT_SNAPSHOT_FMT_AUTO.
 //
 // WARNING: This only works properly on little-endian platforms.
-extern void snapshot_framebuf(const Framebuffer& framebuf, const char* path);
+// WARNING: Snapshot format inferrence only works for lower-case extension
+// names.
+extern void snapshot_framebuf(
+  const Framebuffer& framebuf,
+  const char* path,
+  FramebufferSnapshotFormat framebuf_snapshot_fmt
+);
+inline void snapshot_framebuf(
+  const Framebuffer& framebuf,
+  const char* path
+) {
+  snapshot_framebuf(framebuf, path, L_EXT_FRAMEBUFFER_SNAPSHOT_FORMAT_AUTO);
+}
 
 } // namespace ext
 
