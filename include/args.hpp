@@ -9,8 +9,11 @@ namespace liong {
 namespace args {
 
 struct ArgumentParseConfig {
+  // Expected number of arguments segments.
   uint32_t narg;
+  // Returns true if the parsing is successful.
   bool (*parser)(const char*[], void*);
+  // Destination to be written with parsed value.
   void* dst;
 };
 

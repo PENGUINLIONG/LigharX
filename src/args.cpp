@@ -74,9 +74,10 @@ void parse_args(int argc, const char** argv) {
   while (i < argc) {
     if (iarg_entry >= 0) {
       auto& parse_cfg = arg_cfg.parse_cfgs[iarg_entry];
-      auto j = parse_cfg.narg;
-      ASSERT << !parse_cfg.parser(argv + i, parse_cfg.dst)
+      ASSERT << parse_cfg.parser(argv + i, parse_cfg.dst)
         << "unable to parse argument";
+      ASSERT << (argc - i <= parse_cfg.narg)
+        << "no enough argument segments";
       i += parse_cfg.narg;
       iarg_entry = -1;
     } else {
