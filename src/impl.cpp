@@ -286,6 +286,7 @@ PipelinePrep _create_pipe_prep(
   }
   sbt_size += pipe_layout.sbt_call_stride * pipe_layout.nsbt_call;
   // <<< ORDER IS IMPORTANT; DO NOT RESORT
+
   pipe_layout.launch_cfg_size = pipe_cfg.launch_cfg_size;
 
   OptixProgramGroupOptions opt {};
@@ -366,9 +367,11 @@ PipelineData create_pipe_data(const Pipeline& pipe) {
   const auto& pipe_layout = pipe.pipe_layout;
   auto i = 0;
   OptixShaderBindingTable sbt {};
-  DeviceMemory sbt_devmem = alloc_mem(pipe.pipe_layout.sbt_size,
-    OPTIX_SBT_RECORD_ALIGNMENT);
-  DeviceMemory launch_cfg_devmem = alloc_mem(pipe.pipe_layout.launch_cfg_size);
+  size_t alloc_size = pipe.pipe_layout.sbt_size +
+    pipe.pipe_layout.launch_cfg_size;
+  DeviceMemory devmem = alloc_mem(alloc_size, OPTIX_SBT_RECORD_ALIGNMENT);
+  DeviceMemorySlice sbt_devmem = devmem.slice(0, pipe.pipe_layout.sbt_size);
+  DeviceMemorySlice launch_cfg_devmem = devmem.slice(pipe.pipe_layout.sbt_size);
   const auto base = sbt_devmem.ptr;
 
   // Just don't waste time guessing what does 'prep' means. This function
@@ -402,12 +405,13 @@ PipelineData create_pipe_data(const Pipeline& pipe) {
   liong::log::info("created pipeline data");
   return PipelineData {
     std::move(sbt),
+    std::move(devmem),
     std::move(sbt_devmem),
     std::move(launch_cfg_devmem),
   };
 }
 void destroy_pipe_data(PipelineData& pipe_data) {
-  free_mem(pipe_data.sbt_devmem);
+  free_mem(pipe_data.devmem);
   pipe_data = {};
   liong::log::info("destroyed pipeline data");
 }

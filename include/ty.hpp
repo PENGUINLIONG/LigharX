@@ -26,6 +26,15 @@ struct Context {
 struct DeviceMemorySlice {
   CUdeviceptr ptr;
   size_t size;
+
+  inline DeviceMemorySlice slice(size_t offset, size_t size) const {
+    ASSERT << (offset + size <= this->size)
+      << "slice out of range";
+    return DeviceMemorySlice { ptr + offset, size };
+  }
+  inline DeviceMemorySlice slice(size_t offset) const {
+    return slice(offset, size - offset);
+  }
 };
 struct DeviceMemory {
   // Base address of memory allocation.
@@ -213,9 +222,10 @@ struct Pipeline {
 // used to traverse multiple scene (objects) with respective pipeline data.
 struct PipelineData {
   OptixShaderBindingTable sbt;
-  DeviceMemory sbt_devmem;
+  DeviceMemory devmem;
+  DeviceMemorySlice sbt_devmem;
   // TODO: (penguinliong) Append this to the end of `sbt_devmem`.
-  DeviceMemory launch_cfg_devmem;
+  DeviceMemorySlice launch_cfg_devmem;
 };
 
 
