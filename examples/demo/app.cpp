@@ -32,7 +32,8 @@ Pipeline l_create_naive_pipe(
   const std::vector<char>& ptx,
   const mat::MaterialType& ray_prop,
   const mat::MaterialType& env,
-  const mat::MaterialType& mat
+  const mat::MaterialType& mat,
+  const mat::MaterialType& launch_cfg
 ) {
   // Note: For Visual Studio 2019 the default working directory is
   // `${CMAKE_BINARY_DIR}/bin`
@@ -49,6 +50,7 @@ Pipeline l_create_naive_pipe(
   naive_pipe_cfg.mat_size = mat.size;
   naive_pipe_cfg.trace_depth = TTravDepth;
   naive_pipe_cfg.max_ninst = 3;
+  naive_pipe_cfg.launch_cfg_size = launch_cfg.size;
   return ext::create_naive_pipe(ctxt, naive_pipe_cfg);
 }
 
@@ -170,17 +172,22 @@ int main() {
   mat::MaterialType mat_ty {};
   mat::push_mat_ty_entry(mat_ty, "albedo", sizeof(float3));
   mat::push_mat_ty_entry(mat_ty, "emit", sizeof(float3));
+  mat::MaterialType launch_cfg_ty {};
+  mat::push_mat_ty_entry(launch_cfg_ty, "trav", sizeof(OptixTraversableHandle));
+  mat::push_mat_ty_entry(launch_cfg_ty, "framebuf", sizeof(CUdeviceptr));
 
   mat::Material env;
   mat::Material mat;
+  mat::Material launch_cfg;
   
   try {
     ctxt = create_ctxt();
     {
       auto ptx = ext::read_ptx("../assets/cuda_compile_ptx_1_generated_demo.cu.ptx");
-      pipe = l_create_naive_pipe<2>(ctxt, ptx, ray_prop_ty, env_ty, mat_ty);
+      pipe = l_create_naive_pipe<2>(ctxt, ptx, ray_prop_ty, env_ty, mat_ty,
+        launch_cfg_ty);
     }
-    framebuf = create_framebuf(256, 256);
+    framebuf = create_framebuf(L_FORMAT_R8G8B8A8_UNORM, { 256, 256, 1 });
     //meshes = ext::import_meshes_from_file("./untitled.obj");
     // Initialize meshes.
     meshes = {};
@@ -266,8 +273,20 @@ int main() {
       upload_mem(mat.data, mat_slice, mat.size);
       mat::destroy_mat(mat);
     }
+    /* Launch config */ {
+      launch_cfg = mat::create_mat(launch_cfg_ty);
+      const OptixTraversableHandle trav = scene.inner->trav;
+      const CUdeviceptr fb = framebuf.framebuf_devmem.ptr;
+      mat::assign_mat_entry(launch_cfg_ty, launch_cfg,
+        "trav", &trav, sizeof(trav));
+      mat::assign_mat_entry(launch_cfg_ty, launch_cfg,
+        "framebuf", &fb, sizeof(fb));
+      auto launch_cfg_slice = slice_pipe_launch_cfg(pipe, pipe_data);
+      upload_mem(launch_cfg.data, launch_cfg_slice, launch_cfg.size);
+      mat::destroy_mat(launch_cfg);
+    }
 
-    cmd_traverse(transact, pipe, pipe_data, framebuf, scene);
+    cmd_traverse(transact, pipe, pipe_data, framebuf.dim);
     wait_transact(transact);
 
     ext::snapshot_framebuf(framebuf, "./snapshot.bmp");

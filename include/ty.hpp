@@ -91,12 +91,16 @@ struct PixelFormat {
 
   constexpr bool operator==(const PixelFormat& b) { return _raw == b._raw; }
 };
-#define L_MAKE_VEC(ncomp, fmt) ((uint8_t)((ncomp - 1) << 6) | (uint8_t)fmt)
-constexpr PixelFormat L_FORMAT_UNDEFINED {};
-constexpr PixelFormat L_FORMAT_R8_UNORM { L_MAKE_VEC(1, CU_AD_FORMAT_UNSIGNED_INT8) };
-constexpr PixelFormat L_FORMAT_R32_SFLOAT { L_MAKE_VEC(1, CU_AD_FORMAT_FLOAT) };
-constexpr PixelFormat L_FORMAT_R8G8B8A8_UNORM { L_MAKE_VEC(4, CU_AD_FORMAT_UNSIGNED_INT8) };
-constexpr PixelFormat L_FORMAT_R32G32B32A32_SFLOAT { L_MAKE_VEC(4, CU_AD_FORMAT_FLOAT) };
+#define L_MAKE_VEC(ncomp, fmt)                                                 \
+  ((uint8_t)((ncomp - 1) << 6) | (uint8_t)fmt)
+#define L_DEF_FMT(name, ncomp, fmt)                                            \
+  constexpr PixelFormat L_FORMAT_##name { L_MAKE_VEC(ncomp, fmt) }
+L_DEF_FMT(UNDEFINED, 0, 0);
+L_DEF_FMT(R8_UNORM, 1, CU_AD_FORMAT_UNSIGNED_INT8);
+L_DEF_FMT(R32_SFLOAT, 1, CU_AD_FORMAT_FLOAT);
+L_DEF_FMT(R8G8B8A8_UNORM, 4, CU_AD_FORMAT_UNSIGNED_INT8);
+L_DEF_FMT(R32G32B32A32_SFLOAT, 4, CU_AD_FORMAT_FLOAT);
+#undef L_DEF_FMT
 #undef L_MAKE_VEC
 struct TextureConfig {
   DeviceMemorySlice tex_slice;
@@ -153,7 +157,7 @@ struct PipelineConfig {
 
   // Launch parameter variable name. The parameter variable will be ignored if
   // this field is empty.
-  const char* launch_param_name;
+  const char* launch_cfg_name;
   // Number of words used for the payload. [0..8]
   int npayload_wd;
   // Number of words used for the attributes. [0..8]
@@ -171,6 +175,8 @@ struct PipelineConfig {
   std::vector<PipelineStageConfig> ms_cfgs;
   std::vector<PipelineHitGroupConfig> hitgrp_cfgs;
   std::vector<PipelineCallableConfig> call_cfgs;
+
+  size_t launch_cfg_size;
 };
 struct PipelineLayout {
   size_t sbt_raygen_offset;
@@ -193,6 +199,8 @@ struct PipelineLayout {
 
   size_t sbt_size;
   uint32_t max_ninst;
+
+  size_t launch_cfg_size;
 };
 // Pipeline-related opaque resources.
 struct Pipeline {
@@ -201,18 +209,20 @@ struct Pipeline {
   OptixPipeline pipe;
   PipelineLayout pipe_layout;
 };
-// Data to stuff in pipelines as runtime parameters.
+// Data to stuff in pipelines as runtime parameters. A single pipeline can be
+// used to traverse multiple scene (objects) with respective pipeline data.
 struct PipelineData {
   OptixShaderBindingTable sbt;
   DeviceMemory sbt_devmem;
+  // TODO: (penguinliong) Append this to the end of `sbt_devmem`.
+  DeviceMemory launch_cfg_devmem;
 };
 
 
 
 struct Framebuffer {
-  uint32_t width;
-  uint32_t height;
-  uint32_t depth;
+  PixelFormat fmt;
+  uint3 dim;
   DeviceMemory framebuf_devmem;
 };
 
@@ -327,6 +337,10 @@ struct NaivePipelineConfig {
   // intersection, any-hit and closest-hit programs of the pipeline by the base
   // address returned from `optixGetSbtDataPointer`. This is per-instance data.
   size_t mat_size;
+  // Size of Launch config to be allocated. This material will be accessible in
+  // all stages of the pipeline, by the global constant variable defined with
+  // `LAUNCH_CFG` attribute.
+  size_t launch_cfg_size;
 };
 
 

@@ -195,13 +195,4 @@ struct Transform {
 static_assert(sizeof(Transform) == sizeof(float[12]),
   "type `Transform` have incompatable size than optix transform");
 
-
-
-// TODO: (penguinliong) Support multiple types of framebuffer.
-struct LaunchConfig {
-  uint3 launch_size;
-  OptixTraversableHandle trav;
-  uint32_t* framebuf;
-};
-
 } // namespace liong

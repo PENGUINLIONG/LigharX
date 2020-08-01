@@ -78,6 +78,10 @@ extern void destroy_pipe(Pipeline& pipe);
 // `cmd_init_pipe_data` before use.
 extern PipelineData create_pipe_data(const Pipeline& pipe);
 extern void destroy_pipe_data(PipelineData& pipe);
+extern DeviceMemorySlice slice_pipe_launch_cfg(
+  const Pipeline& pipe,
+  const PipelineData& pipe_data
+);
 extern DeviceMemorySlice slice_pipe_data(
   const Pipeline& pipe,
   const PipelineData& pipe_data,
@@ -86,15 +90,9 @@ extern DeviceMemorySlice slice_pipe_data(
 );
 
 
-extern Framebuffer create_imgless_framebuf(
-  uint32_t weight,
-  uint32_t height = 1,
-  uint32_t depth = 1
-);
 extern Framebuffer create_framebuf(
-  uint32_t width,
-  uint32_t height = 1,
-  uint32_t d = 1
+  PixelFormat fmt,
+  uint3 dim
 );
 extern void destroy_framebuf(Framebuffer& framebuf);
 
@@ -192,27 +190,8 @@ extern void cmd_traverse(
   Transaction& transact,
   const Pipeline& pipe,
   const PipelineData& pipe_data,
-  const Framebuffer& framebuf,
-  OptixTraversableHandle trav
+  uint3 launch_size
 );
-// Create a CUDA stream and launch the stream for OptiX scene traversal
-// controlled by the given pipeline.
-//
-// WARNING: `pipe` must be kept alive through out the lifetime of the created
-// transaction.
-template<typename TTrav,
-  typename _ = std::enable_if_t<std::is_same_v<
-    decltype(std::remove_pointer_t<typename decltype(TTrav::inner)>::trav),
-    OptixTraversableHandle>>>
-void cmd_traverse(
-  Transaction& transact,
-  const Pipeline& pipe,
-  const PipelineData& pipe_data,
-  const Framebuffer& framebuf,
-  const TTrav& sobj
-) {
-  cmd_traverse(transact, pipe, pipe_data, framebuf, sobj.inner->trav);
-}
 // Initialize `PipelineData` layout. An uninitialized `PipelineData` CANNOT be
 // correctly bound by its user pipeline and scheduling pipeline execution with
 // invalid data will lead to undefined behavior. The user code MUST also upload

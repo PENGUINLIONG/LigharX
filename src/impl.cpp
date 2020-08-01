@@ -169,7 +169,7 @@ OptixModule _create_mod(
     pipe_cfg.npayload_wd,
     pipe_cfg.nattr_wd,
     OPTIX_EXCEPTION_FLAG_NONE,
-    pipe_cfg.launch_param_name,
+    pipe_cfg.launch_cfg_name,
   };
   OptixModule mod;
   auto res = optixModuleCreateFromPTX(ctxt.optix_dc, &mod_opt, &pipe_opt,
@@ -286,6 +286,7 @@ PipelinePrep _create_pipe_prep(
   }
   sbt_size += pipe_layout.sbt_call_stride * pipe_layout.nsbt_call;
   // <<< ORDER IS IMPORTANT; DO NOT RESORT
+  pipe_layout.launch_cfg_size = pipe_cfg.launch_cfg_size;
 
   OptixProgramGroupOptions opt {};
   auto& pgrps = pipe_prep.pgrps;
@@ -317,7 +318,7 @@ OptixPipeline _create_pipe(
     pipe_cfg.npayload_wd,
     pipe_cfg.nattr_wd,
     OPTIX_EXCEPTION_FLAG_NONE,
-    pipe_cfg.launch_param_name,
+    pipe_cfg.launch_cfg_name,
   };
   OptixPipelineLinkOptions link_opt {
     pipe_cfg.trace_depth,
@@ -378,6 +379,7 @@ PipelineData create_pipe_data(const Pipeline& pipe) {
   OptixShaderBindingTable sbt {};
   DeviceMemory sbt_devmem = alloc_mem(pipe.pipe_layout.sbt_size,
     OPTIX_SBT_RECORD_ALIGNMENT);
+  DeviceMemory launch_cfg_devmem = alloc_mem(pipe.pipe_layout.launch_cfg_size);
   const auto base = sbt_devmem.ptr;
 
   // Just don't waste time guessing what does 'prep' means. This function
@@ -388,7 +390,7 @@ PipelineData create_pipe_data(const Pipeline& pipe) {
   //
   // I can use linebreaks, I know. Why I have been so resistant to create new
   // lines while I'm writing this crazy shing up.
-#define L_FILL_SBT_SINGLE_ENTRY(optix_name, prep_name, cfg_name)      \
+#define L_FILL_SBT_SINGLE_ENTRY(optix_name, prep_name, cfg_name)               \
   if (pipe_layout.sbt_##prep_name##_stride) {                                  \
     sbt.optix_name##Record = base + pipe_layout.sbt_##prep_name##_offset;      \
     ++i;                                                                       \
@@ -409,7 +411,11 @@ PipelineData create_pipe_data(const Pipeline& pipe) {
   // <<< ORDER IS IMPORTANT; DO NOT RESORT
 
   liong::log::info("created pipeline data");
-  return PipelineData { std::move(sbt), std::move(sbt_devmem) };
+  return PipelineData {
+    std::move(sbt),
+    std::move(sbt_devmem),
+    std::move(launch_cfg_devmem),
+  };
 }
 void destroy_pipe_data(PipelineData& pipe_data) {
   free_mem(pipe_data.sbt_devmem);
@@ -454,27 +460,39 @@ DeviceMemorySlice slice_pipe_data(
     );
   }
 }
-
-
-
-Framebuffer create_imgless_framebuf(
-  uint32_t width,
-  uint32_t height,
-  uint32_t depth
+DeviceMemorySlice slice_pipe_launch_cfg(
+  const Pipeline& pipe,
+  const PipelineData& pipe_data
 ) {
-  ASSERT << ((width != 0) && (height != 0) && (depth != 0))
-    << "framebuffer size cannot be zero";
-  liong::log::info("created imageless framebuffer (width=", width, ", height=",
-    height, ", depth=", depth, ")");
-  return Framebuffer { width, height, depth, {} };
+  // TODO: (penguinliong)
+  return pipe_data.launch_cfg_devmem;
 }
-Framebuffer create_framebuf(uint32_t width, uint32_t height, uint32_t depth) {
-  ASSERT << ((width != 0) && (height != 0) && (depth != 0))
+
+
+
+uint32_t _get_fmt_size(PixelFormat fmt) {
+  // TODO: (penguinliong) Ensure it still matches when more formats are accepted
+  // by cuda.
+  uint32_t comp_size = 0;
+  if (fmt.is_single) {
+    comp_size = sizeof(float);
+  } else if (fmt.is_half) {
+    comp_size = sizeof(uint16_t);
+  } else {
+    comp_size = 4 << (fmt.int_exp2);
+  }
+  return fmt.get_ncomp() * comp_size;
+}
+Framebuffer create_framebuf(
+  PixelFormat fmt,
+  uint3 dim
+) {
+  ASSERT << ((dim.x != 0) && (dim.y != 0) && (dim.z != 0))
     << "framebuffer size cannot be zero";
-  auto framebuf_devmem = alloc_mem(sizeof(uint32_t) * width * height * depth);
-  liong::log::info("created framebuffer (width=", width, ", height=", height,
-    ", depth=", depth, ")");
-  return Framebuffer { width, height, depth, framebuf_devmem };
+  auto framebuf_devmem = alloc_mem(_get_fmt_size(fmt) * dim.x * dim.y * dim.z);
+  liong::log::info("created framebuffer (width=", dim.x, ", height=", dim.y,
+    ", depth=", dim.z, ")");
+  return Framebuffer { fmt, dim, framebuf_devmem };
 }
 void destroy_framebuf(Framebuffer& framebuf) {
   if (framebuf.framebuf_devmem.alloc_base) {
@@ -523,8 +541,11 @@ Mesh create_mesh(const MeshConfig& mesh_cfg) {
   build_in.triangleArray.numIndexTriplets = mesh_cfg.ntri;
   build_in.triangleArray.indexStrideInBytes = mesh_cfg.tri_stride;
   build_in.triangleArray.preTransform = pretrans_slice.ptr;
+#if OPTIX_ABI_VERSION > 22
+  // OptiX 7.1 and higher
   build_in.triangleArray.transformFormat =
     OPTIX_TRANSFORM_FORMAT_MATRIX_FLOAT12;
+#endif
   //build_in.triangleArray.transformFormat = OPTIX_TRANSFORM_FORMAT_NONE;
   build_in.triangleArray.flags = new uint32_t[1] {};
   build_in.triangleArray.numSbtRecords = 1;
@@ -665,20 +686,12 @@ void cmd_traverse(
   Transaction& transact,
   const Pipeline& pipe,
   const PipelineData& pipe_data,
-  const Framebuffer& framebuf,
-  OptixTraversableHandle trav
+  uint3 launch_size
 ) {
-  auto lparam = LaunchConfig {
-    { framebuf.width, framebuf.height, framebuf.depth },
-    trav,
-    reinterpret_cast<uint32_t*>(framebuf.framebuf_devmem.ptr)
-  };
-  DeviceMemory lparam_devmem = shadow_mem(&lparam, sizeof(LaunchConfig));
-
-  OPTIX_ASSERT << optixLaunch(pipe.pipe, transact.stream, lparam_devmem.ptr,
-    lparam_devmem.size, &pipe_data.sbt, framebuf.width, framebuf.height, 1);
+  OPTIX_ASSERT << optixLaunch(pipe.pipe, transact.stream,
+    pipe_data.launch_cfg_devmem.ptr, pipe_data.launch_cfg_devmem.size,
+    &pipe_data.sbt, launch_size.x, launch_size.y, launch_size.z);
   liong::log::info("scheduled transaction for scene traversal");
-  manage_devmem(transact, std::move(lparam_devmem));
 }
 
 
@@ -897,7 +910,7 @@ Pipeline create_naive_pipe(
   pipe_cfg.debug = naive_pipe_cfg.debug;
   pipe_cfg.ptx_data = naive_pipe_cfg.ptx_data;
   pipe_cfg.ptx_size = naive_pipe_cfg.ptx_size;
-  pipe_cfg.launch_param_name = "cfg";
+  pipe_cfg.launch_cfg_name = "cfg";
   pipe_cfg.npayload_wd = 2;
   pipe_cfg.nattr_wd = 2;
   pipe_cfg.trace_depth = naive_pipe_cfg.trace_depth;
@@ -922,6 +935,7 @@ Pipeline create_naive_pipe(
       naive_pipe_cfg.mat_size
     }
   };
+  pipe_cfg.launch_cfg_size = naive_pipe_cfg.launch_cfg_size;
   return create_pipe(ctxt, pipe_cfg);
 }
 
@@ -996,15 +1010,15 @@ void snapshot_devmem(const DeviceMemorySlice& devmem, const char* path) {
 
 void _snapshot_framebuf_bmp(const Framebuffer& framebuf, std::fstream& f) {
   f.write("BM", 2);
-  ASSERT << (framebuf.depth == 1)
+  ASSERT << (framebuf.dim.z == 1)
     << "cannot take snapshot of 3d framebuffer";
   uint32_t img_size = framebuf.framebuf_devmem.size;
   uint32_t bmfile_hdr[] = { 14 + 108 + img_size, 0, 14 + 108 };
   f.write((const char*)bmfile_hdr, sizeof(bmfile_hdr));
   uint32_t bmcore_hdr[] = {
     108, // Size of header, here we use `BITMAPINFOHEADER`.
-    framebuf.width,
-    framebuf.height,
+    framebuf.dim.x,
+    framebuf.dim.y,
     1 | // Number of color planes.
     (32 << 16), // Bits per pixel.
     3, // Compression. (BI_BITFIELDS)

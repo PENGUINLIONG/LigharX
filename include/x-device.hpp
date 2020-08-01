@@ -9,19 +9,6 @@ static_assert(false, "cannot include device-only header file in host code.");
 namespace liong {
 
 //
-// ## Predefined Launch Configuration
-//
-// Because the configuration is DEFINED here in the header file, you have to
-// write all the stages in the same `.cu` source, otherwise you would get some
-// problem linking all the things up.
-//
-
-LAUNCH_CFG
-LaunchConfig cfg;
-
-
-
-//
 // ## Predefined Types
 //
 
@@ -56,43 +43,40 @@ struct RayLife {
 // ## Raygen and Scheduling Utilities
 //
 
+struct LaunchProfile {
+  uint3 launch_size;
+  uint3 launch_idx;
+  uint32_t invoke_idx;
+};
 SHADER_FN
-float2 get_film_coord_n1p1() {
+LaunchProfile get_launch_prof() {
+  uint3 launch_size = optixGetLaunchDimensions();
   uint3 launch_idx = optixGetLaunchIndex();
-  auto x = ((float)(launch_idx.x) * 2 + 1 - cfg.launch_size.x) /
-    cfg.launch_size.x;
-  auto y = ((float)(launch_idx.y) * 2 + 1 - cfg.launch_size.y) /
-    cfg.launch_size.y;
+  uint32_t invoke_idx = (launch_idx.z * launch_size.y + launch_idx.y) * launch_size.x +
+    launch_idx.x;
+  return LaunchProfile {
+    std::move(launch_size),
+    std::move(launch_idx),
+    std::move(invoke_idx),
+  };
+}
+SHADER_FN
+float2 get_film_coord_n1p1(const LaunchProfile& launch_prof) {
+  const uint3& launch_size = launch_prof.launch_size;
+  const uint3& launch_idx = launch_prof.launch_idx;
+  auto x = ((float)(launch_idx.x) * 2 + 1 - launch_size.x) / launch_size.x;
+  auto y = ((float)(launch_idx.y) * 2 + 1 - launch_size.y) / launch_size.y;
   auto rel_pos = make_float2(x, y);
   return rel_pos;
 }
 SHADER_FN
-float2 get_film_coord_0p1() {
-  uint3 launch_idx = optixGetLaunchIndex();
-  auto x = ((float)(launch_idx.x) * 2 + 1) /
-    (2 * cfg.launch_size.x);
-  auto y = ((float)(launch_idx.y) * 2 + 1) /
-    (2 * cfg.launch_size.y);
+float2 get_film_coord_0p1(const LaunchProfile& launch_prof) {
+  const uint3& launch_size = launch_prof.launch_size;
+  const uint3& launch_idx = launch_prof.launch_idx;
+  auto x = ((float)(launch_idx.x) * 2 + 1) / (2 * launch_size.x);
+  auto y = ((float)(launch_idx.y) * 2 + 1) / (2 * launch_size.y);
   auto rel_pos = make_float2(x, y);
   return rel_pos;
-}
-SHADER_FN
-uint32_t get_invoke_idx() {
-  uint3 launch_idx = optixGetLaunchIndex();
-  return (launch_idx.z * cfg.launch_size.y + launch_idx.y) * cfg.launch_size.x +
-      launch_idx.x;
-}
-SHADER_FN
-void write_attm_n1p1(float3 color) {
-  cfg.framebuf[get_invoke_idx()] = color_encode_n1p1(color);
-}
-SHADER_FN
-void write_attm_0p1(float3 color) {
-  cfg.framebuf[get_invoke_idx()] = color_encode_0p1(color);
-}
-SHADER_FN
-void write_attm(uint32_t color) {
-  cfg.framebuf[get_invoke_idx()] = color;
 }
 struct CameraCoordinates {
   float3 o;
@@ -109,12 +93,13 @@ CameraCoordinates make_cam_coord(const Transform& trans) {
 // Get a orthogonally projected ray for this raygen shader invocation.
 SHADER_FN
 Ray ortho_ray(
+  const LaunchProfile& launch_prof,
   const Transform& trans
 ) {
   auto cam_coord = make_cam_coord(trans);
   // Let the rays shoot into the screen.
   float3 front = normalize(cross(cam_coord.up, cam_coord.right));
-  float2 uv = get_film_coord_n1p1();
+  float2 uv = get_film_coord_n1p1(launch_prof);
   cam_coord.o += uv.x * cam_coord.right + uv.y * cam_coord.up;
   return Ray { cam_coord.o, front };
 }
@@ -127,13 +112,14 @@ Ray ortho_ray(
 // ratios.
 SHADER_FN
 Ray perspect_ray(
+  const LaunchProfile& launch_prof,
   const Transform& trans,
   // By default we look at objects from positive-Z to negative-Z in RHS.
   float film_z = 0.7071f
 ) {
   auto cam_coord = make_cam_coord(trans);
   float3 front = normalize(cross(cam_coord.up, cam_coord.right));
-  float2 uv = get_film_coord_n1p1();
+  float2 uv = get_film_coord_n1p1(launch_prof);
   float3 v = normalize(uv.x * cam_coord.right + uv.y * cam_coord.up +
     film_z * front);
   return Ray { cam_coord.o, v };
@@ -143,11 +129,19 @@ Ray perspect_ray(
 
 #define TRAVERSE(trav, life, ray_flags)                                        \
 {                                                                              \
-uint32_t wLife[] = PTR2WORDS(&life);                                           \
-optixTrace(trav, life.ray.o, life.ray.v,                                       \
-  1e-5f, 1e20f, 0.0f, OptixVisibilityMask(255),                                \
-  ray_flags,                                                                   \
-  0, 1, 0, wLife[0], wLife[1]);                                                \
+  uint32_t wLife[] = PTR2WORDS(&life);                                         \
+  optixTrace(trav, life.ray.o, life.ray.v,                                     \
+    1e-5f, 1e20f, 0.0f, OptixVisibilityMask(255),                              \
+    ray_flags,                                                                 \
+    0, 1, 0, wLife[0], wLife[1]);                                              \
+}
+#define TRAVERSE_EX(trav, life, ray_flags)                                     \
+{                                                                              \
+  uint32_t wLife[] = PTR2WORDS(&life);                                         \
+  optixTrace(trav, life.ray.o, life.ray.v,                                     \
+    1e-5f, 1e20f, 0.0f, OptixVisibilityMask(255),                              \
+    ray_flags,                                                                 \
+    0, 1, 0, wLife[0], wLife[1]);                                              \
 }
 
 
@@ -156,7 +150,10 @@ optixTrace(trav, life.ray.o, life.ray.v,                                       \
 // ## Sampling Utilities
 //
 
-// Standard even-spacing sampling utilities.
+// Standard even-spacing sampling utilities. The following sampling points are
+// the referential sampling patterns defined by the Vulkan Specification.
+// See Section 24.3. Multisampling of the Vulkan Specification for more
+// information.
 template<uint32_t TCount>
 struct StandardSampler {};
 template<>

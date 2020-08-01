@@ -4,6 +4,12 @@
 
 namespace liong {
 
+LAUNCH_CFG
+struct LaunchConfig {
+  OptixTraversableHandle trav;
+  uint32_t* framebuf;
+} cfg;
+
 struct Material {
   float3 albedo;
   float3 emit;
@@ -68,6 +74,7 @@ void __miss__() {
 
 SHADER_MAIN
 void __raygen__() {
+  auto launch_prof = get_launch_prof();
   auto trans = Transform()
     .scale(0.5, 0.5, 0.5)
     .rotate({ 0.0, 1.0, 0.0 }, deg2rad(45.0f))
@@ -75,18 +82,14 @@ void __raygen__() {
     .translate(0, 0.5, -2)
     .inverse();
 
-  float3 color;
-
-  RayLife<TraversalResult> life { ortho_ray(trans), 1, {} };
+  RayLife<TraversalResult> life { ortho_ray(launch_prof, trans), 1, {} };
 
   uint32_t wLife[] = PTR2WORDS(&life);
   while (life.ttl--) {
     TRAVERSE(cfg.trav, life, OPTIX_RAY_FLAG_DISABLE_ANYHIT);
   }
 
-  write_attm(life.res.color);
-  //write_attm(make_float3(get_film_coord()));
-  //write_attm(color_encode_n1p1(life.res.color));
+  cfg.framebuf[launch_prof.invoke_idx] = color_encode_n1p1(life.res.color);
 }
 
 }
