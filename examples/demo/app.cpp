@@ -2,6 +2,7 @@
 #include "ext.hpp"
 #include "log.hpp"
 #include "mat.hpp"
+#include "denoise.hpp"
 
 namespace {
 

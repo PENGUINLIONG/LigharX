@@ -463,26 +463,13 @@ DeviceMemorySlice slice_pipe_launch_cfg(
 
 
 
-uint32_t _get_fmt_size(PixelFormat fmt) {
-  // TODO: (penguinliong) Ensure it still matches when more formats are accepted
-  // by cuda.
-  uint32_t comp_size = 0;
-  if (fmt.is_single) {
-    comp_size = sizeof(float);
-  } else if (fmt.is_half) {
-    comp_size = sizeof(uint16_t);
-  } else {
-    comp_size = 4 << (fmt.int_exp2);
-  }
-  return fmt.get_ncomp() * comp_size;
-}
 Framebuffer create_framebuf(
   PixelFormat fmt,
   uint3 dim
 ) {
   ASSERT << ((dim.x != 0) && (dim.y != 0) && (dim.z != 0))
     << "framebuffer size cannot be zero";
-  auto framebuf_devmem = alloc_mem(_get_fmt_size(fmt) * dim.x * dim.y * dim.z);
+  auto framebuf_devmem = alloc_mem(fmt.get_fmt_size() * dim.x * dim.y * dim.z);
   liong::log::info("created framebuffer (width=", dim.x, ", height=", dim.y,
     ", depth=", dim.z, ")");
   return Framebuffer { fmt, dim, framebuf_devmem };

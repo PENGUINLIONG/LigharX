@@ -97,6 +97,19 @@ struct PixelFormat {
 
   constexpr CUarray_format get_cuda_fmt() const { return (CUarray_format)(_raw & 0b00111111); }
   constexpr uint32_t get_ncomp() const { return ncomp; }
+  constexpr uint32_t get_fmt_size() const {
+    // TODO: (penguinliong) Ensure it still matches when more formats are accepted
+    // by cuda.
+    uint32_t comp_size = 0;
+    if (is_single) {
+      comp_size = sizeof(float);
+    } else if (is_half) {
+      comp_size = sizeof(uint16_t);
+    } else {
+      comp_size = 4 << (int_exp2);
+    }
+    return get_ncomp() * comp_size;
+  }
 
   constexpr bool operator==(const PixelFormat& b) { return _raw == b._raw; }
 };
