@@ -45,14 +45,20 @@ constexpr float4 make_vec(float x, float y, float z) {
 constexpr float4 make_vec(float3 v) {
   return float4{ v.x, v.y, v.z, 0.0f };
 }
-X uint32_t pack_unorm4_abgr(float4 x) {
+// Quantize and pack the components in a vector of 4 components into a
+// little-endian 32bit word, with the first component (`x`) packed in the least
+// significant byte.
+X uint32_t pack_unorm4_rgba(float4 x) {
   x = clamp(x, 0, 1);
   return ((uint32_t)(x.x * 255.999)) |
     ((uint32_t)(x.y * 255.999) << 8) |
     ((uint32_t)(x.z * 255.999) << 16) |
     ((uint32_t)(x.w * 255.999) << 24);
 }
-X uint32_t pack_unorm3_abgr(float3 x) {
+// Quantize and pack the components in a vector of 3 components into a
+// little-endian 32bit word, with the first component (`x`) packed in the least
+// significant byte. The most significant byte is set to `0xFF`.
+X uint32_t pack_unorm3_rgba(float3 x) {
   x = clamp(x, 0, 1);
   return ((uint32_t)(x.x * 255.999)) |
     ((uint32_t)(x.y * 255.999) << 8) |
@@ -60,13 +66,13 @@ X uint32_t pack_unorm3_abgr(float3 x) {
 }
 // Color encode real numbers in [0.0, 1.0] to integers in [0, 255] with linear
 // spacing, i.e., The chance a number rounded to 0 is equal to that rounded to
-// 255.
+// 255. The output word is a packed 32bit word in RGBA format.
 X uint32_t color_encode_0p1(const float3& x) {
-  return pack_unorm3_abgr(x);
+  return pack_unorm3_rgba(x);
 }
 // Color encode real numbers in [-1.0, 1.0] to integers in [0, 255] with linear
 // spacing, i.e., The chance a number rounded to 0 is equal to that rounded to
-// 255.
+// 255. The output word is a packed 32bit word in RGBA format.
 X uint32_t color_encode_n1p1(const float3& x) {
   return color_encode_0p1(x / 2 + 0.5f);
 }

@@ -165,6 +165,7 @@ int main() {
   std::vector<SceneObject> sobjs;
   Scene scene;
   Transaction transact;
+  denoise::Denoiser denoiser;
 
   // Define materials.
   mat::MaterialType ray_prop_ty {};
@@ -290,6 +291,17 @@ int main() {
     cmd_traverse(transact, pipe, pipe_data, framebuf.dim);
     wait_transact(transact);
 
+    {
+      denoise::DenoiserConfig denoiser_cfg {};
+      denoiser_cfg.fmt = framebuf.fmt;
+      denoiser_cfg.hdr_intensity = 0;
+      denoiser_cfg.in_kind = OPTIX_DENOISER_INPUT_RGB;
+      denoiser_cfg.max_dim = framebuf.dim;
+      denoiser = denoise::create_denoiser(ctxt, denoiser_cfg);
+    }
+    denoise::cmd_denoise(transact, denoiser, framebuf, framebuf);
+    wait_transact(transact);
+
     ext::snapshot_framebuf(framebuf, "./snapshot.bmp");
 
     liong::log::info("sounds good");
@@ -300,6 +312,7 @@ int main() {
   } catch (...) {
     liong::log::error("application threw an illiterate exception");
   }
+  denoise::destroy_denoiser(denoiser);
   destroy_transact(transact);
   destroy_pipe_data(pipe_data);
   destroy_scene(scene);
