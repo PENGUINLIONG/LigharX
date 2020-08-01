@@ -333,19 +333,6 @@ OptixPipeline _create_pipe(
   OPTIX_ASSERT << res;
   return pipe;
 }
-void _set_pipe_stack_size(OptixPipeline pipe, const PipelineConfig& pipe_cfg) {
-  const size_t DEFAULT_STACK_SIZE = 2048;
-  const size_t DEFAULT_MAX_TRAV_GRAPH_DEPTH = 3;
-  // TODO: (penguinliong) use stack size & max traversable depth depth hint from
-  // pipeline config. These can be inferred from reveived PTX.
-  OPTIX_ASSERT << optixPipelineSetStackSize(
-    pipe,
-    DEFAULT_STACK_SIZE,
-    DEFAULT_STACK_SIZE,
-    DEFAULT_STACK_SIZE,
-    DEFAULT_MAX_TRAV_GRAPH_DEPTH
-  );
-}
 
 
 Pipeline create_pipe(const Context& ctxt, const PipelineConfig& pipe_cfg) {
@@ -354,6 +341,8 @@ Pipeline create_pipe(const Context& ctxt, const PipelineConfig& pipe_cfg) {
   auto mod = _create_mod(ctxt, pipe_cfg);
   auto pipe_prep = _create_pipe_prep(ctxt, pipe_cfg, mod);
   auto pipe = _create_pipe(ctxt, pipe_cfg, pipe_prep.pgrps);
+  // Not necessarily setting the stack size because it will be computed
+  // internally automatically.
   std::stringstream ss;
   liong::log::info("created pipeline from module");
   return Pipeline {
