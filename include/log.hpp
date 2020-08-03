@@ -62,4 +62,4 @@ inline void error(const TArgs& ... msg) {
 }
 
 
-}
+} // namespace liong

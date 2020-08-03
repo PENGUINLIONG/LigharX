@@ -320,17 +320,6 @@ struct Transaction {
 
 
 
-namespace type_traits {
-
-template<typename T>
-constexpr bool is_buffer_object_v = std::is_trivially_copyable_v<T> &
-  !std::is_pointer_v<T>;
-
-}
-
-
-
-
 
 //
 // Extensions.
@@ -368,7 +357,7 @@ struct NaivePipelineConfig {
 
 
 
-}
+} // namespace ext
 
 
-}
+} // namespace liong

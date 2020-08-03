@@ -227,7 +227,7 @@ extern void cmd_build_scene(
 extern void cmd_compact_mem(
   Transaction& transact,
   const Context& ctxt,
-  AsFeedback* as_fb
+  AsFeedback& as_fb
 );
 template<typename TTrav,
   typename _ = std::enable_if_t<std::is_same_v<
@@ -238,7 +238,7 @@ void cmd_compact_mem(
   const Context& ctxt,
   const TTrav& x
 ) {
-  cmd_compact_mem(transact, ctxt, x.inner);
+  cmd_compact_mem(transact, ctxt, *x.inner);
 }
 template<typename TTrav,
   typename _ = std::enable_if_t<std::is_same_v<
@@ -250,8 +250,8 @@ void cmd_compact_mems(
   const std::vector<TTrav>& xs
 ) {
   for (const auto& x : xs) {
-    cmd_compact_mem(transact, ctxt, x.inner);
+    cmd_compact_mem(transact, ctxt, *x.inner);
   }
 }
 
-}
+} // namespace liong

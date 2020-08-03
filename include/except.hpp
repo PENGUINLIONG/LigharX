@@ -67,4 +67,4 @@ inline const Asserted operator<<(Assert a, bool cond) {
 }
 #define ASSERT (::liong::Assert{})
 
-}
+} // namespace liong
