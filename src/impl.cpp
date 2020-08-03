@@ -521,11 +521,11 @@ Mesh create_mesh(const MeshConfig& mesh_cfg) {
   build_in.triangleArray.numIndexTriplets = mesh_cfg.ntri;
   build_in.triangleArray.indexStrideInBytes = mesh_cfg.tri_stride;
   build_in.triangleArray.preTransform = pretrans_slice.ptr;
-#if OPTIX_ABI_VERSION > 22
+#if OPTIX_VERSION > 70000
   // OptiX 7.1 and higher
   build_in.triangleArray.transformFormat =
     OPTIX_TRANSFORM_FORMAT_MATRIX_FLOAT12;
-#endif
+#endif // OPTIX_VERSION > 70000
   //build_in.triangleArray.transformFormat = OPTIX_TRANSFORM_FORMAT_NONE;
   build_in.triangleArray.flags = new uint32_t[1] {};
   build_in.triangleArray.numSbtRecords = 1;
@@ -839,24 +839,24 @@ void cmd_build_scene(
 void cmd_compact_mem(
   Transaction& transact,
   const Context& ctxt,
-  AsFeedback* as_fb
+  AsFeedback& as_fb
 ) {
-  ASSERT << (as_fb->compact_size != 0)
+  ASSERT << (as_fb.compact_size != 0)
     << "not a compactable as";
-  if (as_fb->compact_size >= as_fb->devmem.size) {
+  if (as_fb.compact_size >= as_fb.devmem.size) {
     liong::log::info("ignored compaction since memory use will not decrease");
   }
-  OptixTraversableHandle uncompact_trav = std::exchange(as_fb->trav, {});
+  OptixTraversableHandle uncompact_trav = std::exchange(as_fb.trav, {});
   DeviceMemory uncompact_devmem = std::exchange(
-    as_fb->devmem,
-    alloc_mem(as_fb->compact_size, OPTIX_ACCEL_BUFFER_BYTE_ALIGNMENT)
+    as_fb.devmem,
+    alloc_mem(as_fb.compact_size, OPTIX_ACCEL_BUFFER_BYTE_ALIGNMENT)
   );
 
   OPTIX_ASSERT << optixAccelCompact(ctxt.optix_dc, transact.stream,
-    uncompact_trav, as_fb->devmem.ptr, as_fb->devmem.size, &as_fb->trav);
+    uncompact_trav, as_fb.devmem.ptr, as_fb.devmem.size, &as_fb.trav);
   manage_devmem(transact, std::move(uncompact_devmem));
   liong::log::info("scheduled memory compaction (", uncompact_devmem.size,
-    "bytes -> ", as_fb->compact_size, "bytes)");
+    "bytes -> ", as_fb.compact_size, "bytes)");
 }
 
 

@@ -17,6 +17,8 @@ struct DenoiserConfig {
   // If set to a non-zero value, HDR denoise model is enabled; LDR denoise model
   // is used othersize.
   float hdr_intensity;
+  // Allow the framebuffer to be the input and output at the same time.
+  bool inplace;
 };
 struct Denoiser {
   OptixDenoiser denoiser;

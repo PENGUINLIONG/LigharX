@@ -17,10 +17,8 @@ OptixPixelFormat _fmt_lighar2optix(PixelFormat fmt) {
     case 3: return OPTIX_PIXEL_FORMAT_FLOAT4;
     }
   } else if (fmt.int_exp2 == 1) {
-    switch (fmt.ncomp) {
-    case 2: return OPTIX_PIXEL_FORMAT_UCHAR3;
-    case 3: return OPTIX_PIXEL_FORMAT_UCHAR4;
-    }
+    ASSERT << false
+      << "quantized data cannot be denoised";
   }
   ASSERT << false
     << "format not supported by optix";
@@ -29,7 +27,9 @@ OptixPixelFormat _fmt_lighar2optix(PixelFormat fmt) {
 Denoiser create_denoiser(const Context& ctxt, const DenoiserConfig& cfg) {
   OptixDenoiserOptions denoiser_opt;
   denoiser_opt.inputKind = cfg.in_kind;
+#if OPTIX_VERSION < 70100
   denoiser_opt.pixelFormat = _fmt_lighar2optix(cfg.fmt);
+#endif // OPTIX_VERSION < 70100
   OptixDenoiser denoiser;
   // FIXME: (penguinliong) Is that all constant zero for floating point number
   // initialy the same representation?
@@ -40,21 +40,29 @@ Denoiser create_denoiser(const Context& ctxt, const DenoiserConfig& cfg) {
   OptixDenoiserSizes denoiser_size;
   OPTIX_ASSERT << optixDenoiserComputeMemoryResources(denoiser, cfg.max_dim.x,
     cfg.max_dim.y, &denoiser_size);
-  size_t hdr_intensity_offset = denoiser_size.stateSizeInBytes +
-    denoiser_size.recommendedScratchSizeInBytes;
+#if OPTIX_VERSION < 70100
+  size_t scratch_size = denoiser_size.recommendedScratchSizeInBytes;
+#else
+  size_t scratch_size = cfg.inplace ?
+    denoiser_size.withOverlapScratchSizeInBytes :
+    denoiser_size.withoutOverlapScratchSizeInBytes;
+#endif
+  size_t hdr_intensity_offset = denoiser_size.stateSizeInBytes + scratch_size;
+
   size_t alloc_size = hdr_intensity_offset +
     // Size of HDR intensity.
     sizeof(float);
   auto devmem = alloc_mem(alloc_size);
   auto state_devmem = devmem.slice(0, denoiser_size.stateSizeInBytes);
   auto scratch_devmem = devmem.slice(denoiser_size.stateSizeInBytes,
-    denoiser_size.recommendedScratchSizeInBytes);
+    scratch_size);
   auto hdr_intensity_devmem = devmem.slice(hdr_intensity_offset, sizeof(float));
   return Denoiser {
     std::move(denoiser),
     std::move(devmem),
     std::move(state_devmem),
     std::move(scratch_devmem),
+    std::move(hdr_intensity_devmem),
   };
   liong::log::info("destroyed denoiser");
 }

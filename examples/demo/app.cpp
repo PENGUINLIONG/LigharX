@@ -297,6 +297,7 @@ int main() {
       denoiser_cfg.hdr_intensity = 0;
       denoiser_cfg.in_kind = OPTIX_DENOISER_INPUT_RGB;
       denoiser_cfg.max_dim = framebuf.dim;
+      denoiser_cfg.inplace = true;
       denoiser = denoise::create_denoiser(ctxt, denoiser_cfg);
     }
     denoise::cmd_denoise(transact, denoiser, framebuf, framebuf);
