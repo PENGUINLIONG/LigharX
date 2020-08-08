@@ -98,7 +98,7 @@ void transfer_mem(const DeviceMemorySlice& src, const DeviceMemorySlice& dst) {
 void upload_mem(const void* src, const DeviceMemorySlice& dst, size_t size) {
   if (size == 0) { return; }
   ASSERT << (size <= dst.size)
-    << "memory read out of range";
+    << "memory write out of range";
   CUDA_ASSERT << cuMemcpyHtoD(dst.ptr, src, size);
 }
 void download_mem(const DeviceMemorySlice& src, void* dst, size_t size) {
