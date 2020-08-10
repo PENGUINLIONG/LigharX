@@ -111,7 +111,7 @@ struct PixelFormat {
     }
     return get_ncomp() * comp_size;
   }
-  // Extract a pixel from the buffer.
+  // Extract a real number from the buffer.
   inline float extract(const void* buf, size_t i, uint32_t comp) const {
     if (comp > ncomp) { return 0.f; }
     if (is_single) {
@@ -140,7 +140,20 @@ struct PixelFormat {
     ASSERT << false
       << "unsupported framebuffer format";
   }
-
+  // Extract a 32-bit word from the buffer as an integer. If the format is
+  // shorter than 32 bits zeros are padded from MSB.
+  inline uint32_t extract_word(const void* buf, size_t i, uint32_t comp) const {
+    ASSERT << (is_single | is_half)
+      << "real number type cannot be extracted as bitfield";
+    switch (int_exp2) {
+      case 0:
+        return ((const uint8_t*)buf)[i * get_ncomp() + comp];
+      case 1:
+        return ((const uint16_t*)buf)[i * get_ncomp() + comp];
+      case 2:
+        return ((const uint32_t*)buf)[i * get_ncomp() + comp];
+    }
+  }
   constexpr bool operator==(const PixelFormat& b) { return _raw == b._raw; }
 };
 #define L_MAKE_VEC(ncomp, fmt)                                                 \
