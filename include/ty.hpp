@@ -2,6 +2,7 @@
 // LigharX types.
 // @PENGUINLIONG
 #include <vector>
+#include <stdexcept>
 #include "x.hpp"
 #include "except.hpp"
 
@@ -96,7 +97,7 @@ struct PixelFormat {
   PixelFormat& operator=(PixelFormat&&) = default;
 
   constexpr CUarray_format get_cuda_fmt() const { return (CUarray_format)(_raw & 0b00111111); }
-  constexpr uint32_t get_ncomp() const { return ncomp; }
+  constexpr uint32_t get_ncomp() const { return ncomp + 1; }
   constexpr uint32_t get_fmt_size() const {
     // TODO: (penguinliong) Ensure it still matches when more formats are accepted
     // by cuda.
@@ -109,6 +110,35 @@ struct PixelFormat {
       comp_size = 4 << (int_exp2);
     }
     return get_ncomp() * comp_size;
+  }
+  // Extract a pixel from the buffer.
+  inline float extract(const void* buf, size_t i, uint32_t comp) const {
+    if (comp > ncomp) { return 0.f; }
+    if (is_single) {
+      return ((const float*)buf)[i * get_ncomp() + comp];
+    } else if (is_half) {
+      throw std::logic_error("not implemented yet");
+    } else if (is_signed) {
+      switch (int_exp2) {
+      case 0:
+        return ((const int8_t*)buf)[i * get_ncomp() + comp] / 128.f;
+      case 1:
+        return ((const int16_t*)buf)[i * get_ncomp() + comp] / 32768.f;
+      case 2:
+        return ((const int32_t*)buf)[i * get_ncomp() + comp] / 2147483648.f;
+      }
+    } else {
+      switch (int_exp2) {
+      case 0:
+        return ((const uint8_t*)buf)[i * get_ncomp() + comp] / 255.f;
+      case 1:
+        return ((const uint16_t*)buf)[i * get_ncomp() + comp] / 65535.f;
+      case 2:
+        return ((const uint32_t*)buf)[i * get_ncomp() + comp] / 4294967296.f;
+      }
+    }
+    ASSERT << false
+      << "unsupported framebuffer format";
   }
 
   constexpr bool operator==(const PixelFormat& b) { return _raw == b._raw; }

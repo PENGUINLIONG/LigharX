@@ -1021,8 +1021,18 @@ void _snapshot_framebuf_bmp(const Framebuffer& framebuf, std::fstream& f) {
   auto hostmem_size = framebuf.framebuf_devmem.size;
   auto hostmem = std::malloc(hostmem_size);
   download_mem(framebuf.framebuf_devmem, hostmem, hostmem_size);
-  f.write((const char*)hostmem, hostmem_size);
+  uint8_t buf;
+  for (auto i = 0; i < framebuf.dim.y; ++i) {
+    for (auto j = 0; j < framebuf.dim.x; ++j) {
+      for (auto k = 0; k < framebuf.fmt.get_ncomp(); ++k) {
+        buf = framebuf.fmt.extract(hostmem, i * framebuf.dim.x + j, k) * 255.99;
+        f.write((const char*)&buf, sizeof(buf));
+      }
+    }
+  }
   std::free(hostmem);
+  f.flush();
+  f.close();
 }
 void _snapshot_framebuf_exr(const Framebuffer& framebuf, std::fstream& f) {
   throw std::logic_error("not implemented yet");
