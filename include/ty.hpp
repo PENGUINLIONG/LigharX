@@ -107,7 +107,7 @@ struct PixelFormat {
     } else if (is_half) {
       comp_size = sizeof(uint16_t);
     } else {
-      comp_size = 4 << (int_exp2);
+      comp_size = 4 << (int_exp2) >> 3;
     }
     return get_ncomp() * comp_size;
   }
@@ -149,8 +149,10 @@ struct PixelFormat {
   constexpr PixelFormat L_FORMAT_##name { L_MAKE_VEC(ncomp, fmt) }
 L_DEF_FMT(UNDEFINED, 0, 0);
 L_DEF_FMT(R8_UNORM, 1, CU_AD_FORMAT_UNSIGNED_INT8);
+L_DEF_FMT(R32_UINT, 1, CU_AD_FORMAT_UNSIGNED_INT32);
 L_DEF_FMT(R32_SFLOAT, 1, CU_AD_FORMAT_FLOAT);
 L_DEF_FMT(R8G8B8A8_UNORM, 4, CU_AD_FORMAT_UNSIGNED_INT8);
+L_DEF_FMT(R32G32B32A32_UINT, 4, CU_AD_FORMAT_UNSIGNED_INT32);
 L_DEF_FMT(R32G32B32A32_SFLOAT, 4, CU_AD_FORMAT_FLOAT);
 #undef L_DEF_FMT
 #undef L_MAKE_VEC
