@@ -189,7 +189,7 @@ int main() {
       pipe = l_create_naive_pipe<2>(ctxt, ptx, ray_prop_ty, env_ty, mat_ty,
         launch_cfg_ty);
     }
-    framebuf = create_framebuf(L_FORMAT_R8G8B8A8_UNORM, { 256, 256, 1 });
+    framebuf = create_framebuf(L_FORMAT_R32G32B32A32_SFLOAT, { 256, 256, 1 });
     //meshes = ext::import_meshes_from_file("./untitled.obj");
     // Initialize meshes.
     meshes = {};
@@ -290,6 +290,7 @@ int main() {
 
     cmd_traverse(transact, pipe, pipe_data, framebuf.dim);
     wait_transact(transact);
+    ext::snapshot_framebuf(framebuf, "./snapshot.bmp");
 
     {
       denoise::DenoiserConfig denoiser_cfg {};
@@ -303,7 +304,7 @@ int main() {
     denoise::cmd_denoise(transact, denoiser, framebuf, framebuf);
     wait_transact(transact);
 
-    ext::snapshot_framebuf(framebuf, "./snapshot.bmp");
+    ext::snapshot_framebuf(framebuf, "./snapshot.denoised.bmp");
 
     liong::log::info("sounds good");
   } catch (const std::exception& e) {

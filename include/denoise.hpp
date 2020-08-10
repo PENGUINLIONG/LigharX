@@ -31,7 +31,7 @@ struct Denoiser {
 
 
 extern Denoiser create_denoiser(const Context& ctxt, const DenoiserConfig& cfg);
-extern void destroy_denoiser(const Denoiser& denoiser);
+extern void destroy_denoiser(Denoiser& denoiser);
 
 
 extern void cmd_denoise(

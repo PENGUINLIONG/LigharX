@@ -16,7 +16,7 @@ OptixPixelFormat _fmt_lighar2optix(PixelFormat fmt) {
     case 2: return OPTIX_PIXEL_FORMAT_FLOAT3;
     case 3: return OPTIX_PIXEL_FORMAT_FLOAT4;
     }
-  } else if (fmt.int_exp2 == 1) {
+  } else if (fmt.int_exp2 != 0) {
     ASSERT << false
       << "quantized data cannot be denoised";
   }
@@ -66,8 +66,10 @@ Denoiser create_denoiser(const Context& ctxt, const DenoiserConfig& cfg) {
   };
   liong::log::info("destroyed denoiser");
 }
-void destroy_denoiser(const Denoiser& denoiser) {
+void destroy_denoiser(Denoiser& denoiser) {
+  free_mem(denoiser.devmem);
   OPTIX_ASSERT << optixDenoiserDestroy(denoiser.denoiser);
+  denoiser = {};
   liong::log::info("destroyed denoiser");
 }
 

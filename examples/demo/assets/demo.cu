@@ -7,7 +7,7 @@ namespace liong {
 LAUNCH_CFG
 struct LaunchConfig {
   OptixTraversableHandle trav;
-  uint32_t* framebuf;
+  float4* framebuf;
 } cfg;
 
 struct Material {
@@ -89,7 +89,7 @@ void __raygen__() {
     TRAVERSE(cfg.trav, life, OPTIX_RAY_FLAG_DISABLE_ANYHIT);
   }
 
-  cfg.framebuf[launch_prof.invoke_idx] = color_encode_n1p1(life.res.color);
+  cfg.framebuf[launch_prof.invoke_idx] = make_float4(life.res.color, 1.0);
 }
 
 }
