@@ -120,20 +120,20 @@ struct PixelFormat {
       throw std::logic_error("not implemented yet");
     } else if (is_signed) {
       switch (int_exp2) {
-      case 0:
-        return ((const int8_t*)buf)[i * get_ncomp() + comp] / 128.f;
       case 1:
-        return ((const int16_t*)buf)[i * get_ncomp() + comp] / 32768.f;
+        return ((const int8_t*)buf)[i * get_ncomp() + comp] / 128.f;
       case 2:
+        return ((const int16_t*)buf)[i * get_ncomp() + comp] / 32768.f;
+      case 3:
         return ((const int32_t*)buf)[i * get_ncomp() + comp] / 2147483648.f;
       }
     } else {
       switch (int_exp2) {
-      case 0:
-        return ((const uint8_t*)buf)[i * get_ncomp() + comp] / 255.f;
       case 1:
-        return ((const uint16_t*)buf)[i * get_ncomp() + comp] / 65535.f;
+        return ((const uint8_t*)buf)[i * get_ncomp() + comp] / 255.f;
       case 2:
+        return ((const uint16_t*)buf)[i * get_ncomp() + comp] / 65535.f;
+      case 3:
         return ((const uint32_t*)buf)[i * get_ncomp() + comp] / 4294967296.f;
       }
     }
@@ -143,14 +143,14 @@ struct PixelFormat {
   // Extract a 32-bit word from the buffer as an integer. If the format is
   // shorter than 32 bits zeros are padded from MSB.
   inline uint32_t extract_word(const void* buf, size_t i, uint32_t comp) const {
-    ASSERT << (is_single | is_half)
+    ASSERT << (!is_single & !is_half)
       << "real number type cannot be extracted as bitfield";
     switch (int_exp2) {
-      case 0:
-        return ((const uint8_t*)buf)[i * get_ncomp() + comp];
       case 1:
-        return ((const uint16_t*)buf)[i * get_ncomp() + comp];
+        return ((const uint8_t*)buf)[i * get_ncomp() + comp];
       case 2:
+        return ((const uint16_t*)buf)[i * get_ncomp() + comp];
+      case 3:
         return ((const uint32_t*)buf)[i * get_ncomp() + comp];
     }
   }
