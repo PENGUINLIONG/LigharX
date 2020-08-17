@@ -55,6 +55,13 @@ public:
 };
 struct Asserted { bool cond; };
 struct Assert {};
+inline const Assert operator<<(Asserted a, const char* msg) {
+  if (a.cond) {
+    return {};
+  } else {
+    throw AssertionFailedException { msg };
+  }
+}
 inline const Assert operator<<(Asserted a, const std::string& msg) {
   if (a.cond) {
     return {};
