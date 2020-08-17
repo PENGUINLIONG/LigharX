@@ -45,7 +45,7 @@ void print_help() {
   std::exit(0);
 }
 void report_unknown_arg(const char* arg) {
-  std::cout << arg << std::endl;
+  std::cout << "unknown argument: " << arg << std::endl;
   print_help();
 }
 
