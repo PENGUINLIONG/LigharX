@@ -100,7 +100,7 @@ struct TypedArgumentParser<float> {
 };
 template<>
 struct TypedArgumentParser<int2> {
-  typedef int arg_ty;
+  typedef int2 arg_ty;
   static const uint32_t narg = 2;
   static bool parse(const char* lit[], void* dst) {
     *(int2*)dst = make_int2(std::atoi(lit[0]), std::atoi(lit[1]));
@@ -109,7 +109,7 @@ struct TypedArgumentParser<int2> {
 };
 template<>
 struct TypedArgumentParser<float2> {
-  typedef float arg_ty;
+  typedef float2 arg_ty;
   static const uint32_t narg = 2;
   static bool parse(const char* lit[], void* dst) {
     *(float2*)dst = make_float2(std::atof(lit[0]), std::atof(lit[1]));
@@ -118,7 +118,7 @@ struct TypedArgumentParser<float2> {
 };
 template<>
 struct TypedArgumentParser<int3> {
-  typedef int arg_ty;
+  typedef int3 arg_ty;
   static const uint32_t narg = 3;
   static bool parse(const char* lit[], void* dst) {
     *(int3*)dst = make_int3(std::atoi(lit[0]), std::atoi(lit[1]),
@@ -128,7 +128,7 @@ struct TypedArgumentParser<int3> {
 };
 template<>
 struct TypedArgumentParser<float3> {
-  typedef float arg_ty;
+  typedef float3 arg_ty;
   static const uint32_t narg = 3;
   static bool parse(const char* lit[], void* dst) {
     *(float3*)dst = make_float3(std::atof(lit[0]), std::atof(lit[1]),
@@ -138,7 +138,7 @@ struct TypedArgumentParser<float3> {
 };
 template<>
 struct TypedArgumentParser<int4> {
-  typedef int arg_ty;
+  typedef int4 arg_ty;
   static const uint32_t narg = 4;
   static bool parse(const char* lit[], void* dst) {
     *(int4*)dst = make_int4(std::atoi(lit[0]), std::atoi(lit[1]),
@@ -148,7 +148,7 @@ struct TypedArgumentParser<int4> {
 };
 template<>
 struct TypedArgumentParser<float4> {
-  typedef float arg_ty;
+  typedef float4 arg_ty;
   static const uint32_t narg = 4;
   static bool parse(const char* lit[], void* dst) {
     *(float4*)dst = make_float4(std::atof(lit[0]), std::atof(lit[1]),
@@ -186,7 +186,13 @@ struct SwitchArgumentParser {
 
 
 using IntParser = TypedArgumentParser<int>;
+using Int2Parser = TypedArgumentParser<int2>;
+using Int3Parser = TypedArgumentParser<int3>;
+using Int4Parser = TypedArgumentParser<int4>;
 using FloatParser = TypedArgumentParser<float>;
+using Float2Parser = TypedArgumentParser<float2>;
+using Float3Parser = TypedArgumentParser<float3>;
+using Float4Parser = TypedArgumentParser<float4>;
 using BoolParser = TypedArgumentParser<bool>;
 using StringParser = TypedArgumentParser<std::string>;
 using SwitchParser = SwitchArgumentParser;
