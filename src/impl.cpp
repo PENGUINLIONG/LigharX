@@ -1017,11 +1017,12 @@ CommonSnapshot import_common_snapshot(const char* path) {
       << "imported file is not a common snapshot";
   }
 
-  auto data = std::malloc(head.size);
-  ASSERT << (f.readsome((char*)&data, head.size) == head.size)
+  auto size = head.stride * head.nelem;
+  auto data = std::malloc(size);
+  ASSERT << (f.readsome((char*)&data, size) == size)
     << "snapshot content is shorter than declared";
   
-  return CommonSnapshot { data, head.size, head.type, is_le };
+  return CommonSnapshot { data, size, head.type, is_le };
 }
 void destroy_common_snapshot(CommonSnapshot& snapshot) {
   std::free(snapshot.data);

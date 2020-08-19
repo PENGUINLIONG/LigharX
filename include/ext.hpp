@@ -111,8 +111,11 @@ struct SnapshotCommonHeader {
   // Type code of snapshot content. If a snapshot type has multiple versions,
   // version number or other semantical constructs should be encoded here.
   uint32_t type;
-  // Size of the element type, excluding this header, used for validation.
-  uint64_t size;
+  // Number of homogeneous data element in `data`.
+  uint64_t nelem;
+  // Size of data element in bytes. The import procedure will enforce to consume
+  // at least and no more than this amount of data.
+  uint64_t stride;
 };
 // Take a snapshot of host memory content and writei it to a binary file. The
 // binary data will follow a header section.
@@ -139,10 +142,11 @@ extern void snapshot_devmem(
 struct CommonSnapshot {
   // Dynamically allocated data buffer.
   void* data;
-  // Size of `data` in bytes. It can be set to zero and let the consumer
-  // application determine how much data is a valid amount. The import procedure
-  // will enforce to consume exactly this amount of data.
-  size_t size;
+  // Number of homogeneous data element in `data`.
+  uint64_t nelem;
+  // Size of data element in bytes. The import procedure will enforce to consume
+  // at least and no more than this amount of data.
+  uint64_t stride;
   // Type code of snapshot content.
   uint32_t type;
   // Whether the buffer producer is an little endian machine.
