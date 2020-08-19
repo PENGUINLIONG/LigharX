@@ -81,11 +81,20 @@ struct TypedArgumentParser<std::string> {
   }
 };
 template<>
-struct TypedArgumentParser<int> {
+struct TypedArgumentParser<int32_t> {
   typedef int arg_ty;
   static const uint32_t narg = 1;
   static bool parse(const char* lit[], void* dst) {
-    *(int*)dst = std::atoi(lit[0]);
+    *(int32_t*)dst = std::atoi(lit[0]);
+    return true;
+  }
+};
+template<>
+struct TypedArgumentParser<uint32_t> {
+  typedef int arg_ty;
+  static const uint32_t narg = 1;
+  static bool parse(const char* lit[], void* dst) {
+    *(uint32_t*)dst = std::atoi(lit[0]);
     return true;
   }
 };
@@ -104,6 +113,15 @@ struct TypedArgumentParser<int2> {
   static const uint32_t narg = 2;
   static bool parse(const char* lit[], void* dst) {
     *(int2*)dst = make_int2(std::atoi(lit[0]), std::atoi(lit[1]));
+    return true;
+  }
+};
+template<>
+struct TypedArgumentParser<uint2> {
+  typedef uint2 arg_ty;
+  static const uint32_t narg = 2;
+  static bool parse(const char* lit[], void* dst) {
+    *(uint2*)dst = make_uint2(std::atoi(lit[0]), std::atoi(lit[1]));
     return true;
   }
 };
@@ -127,6 +145,16 @@ struct TypedArgumentParser<int3> {
   }
 };
 template<>
+struct TypedArgumentParser<uint3> {
+  typedef uint3 arg_ty;
+  static const uint32_t narg = 3;
+  static bool parse(const char* lit[], void* dst) {
+    *(uint3*)dst = make_uint3(std::atoi(lit[0]), std::atoi(lit[1]),
+      std::atoi(lit[2]));
+    return true;
+  }
+};
+template<>
 struct TypedArgumentParser<float3> {
   typedef float3 arg_ty;
   static const uint32_t narg = 3;
@@ -142,6 +170,16 @@ struct TypedArgumentParser<int4> {
   static const uint32_t narg = 4;
   static bool parse(const char* lit[], void* dst) {
     *(int4*)dst = make_int4(std::atoi(lit[0]), std::atoi(lit[1]),
+      std::atoi(lit[2]), std::atoi(lit[3]));
+    return true;
+  }
+};
+template<>
+struct TypedArgumentParser<uint4> {
+  typedef uint4 arg_ty;
+  static const uint32_t narg = 4;
+  static bool parse(const char* lit[], void* dst) {
+    *(uint4*)dst = make_uint4(std::atoi(lit[0]), std::atoi(lit[1]),
       std::atoi(lit[2]), std::atoi(lit[3]));
     return true;
   }
@@ -185,10 +223,14 @@ struct SwitchArgumentParser {
 };
 
 
-using IntParser = TypedArgumentParser<int>;
+using IntParser = TypedArgumentParser<int32_t>;
 using Int2Parser = TypedArgumentParser<int2>;
 using Int3Parser = TypedArgumentParser<int3>;
 using Int4Parser = TypedArgumentParser<int4>;
+using UintParser = TypedArgumentParser<uint32_t>;
+using Uint2Parser = TypedArgumentParser<uint2>;
+using Uint3Parser = TypedArgumentParser<uint3>;
+using Uint4Parser = TypedArgumentParser<uint4>;
 using FloatParser = TypedArgumentParser<float>;
 using Float2Parser = TypedArgumentParser<float2>;
 using Float3Parser = TypedArgumentParser<float3>;
