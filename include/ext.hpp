@@ -102,6 +102,25 @@ inline void cmd_build_sobjs(
 
 
 
+struct SnapshotCommonHeader {
+  // Snapshot magic number, MUST be set to `0x894C4A33` (.LJ3 in big endian).
+  // The magic number can also be used to identify endian. Please ensure you
+  // initialized the header with `init_snapshot_common_header`, so this field is
+  // correctly filled.
+  uint32_t magic = 0x894C4A33;
+  // Type code of snapshot content. If a snapshot type has multiple versions,
+  // version number or other semantical constructs should be encoded here.
+  uint32_t type;
+  // Size of the element type, excluding this header, used for validation.
+  uint64_t size;
+};
+extern void snapshot_hostmem(
+  const void* hostmem,
+  size_t hostmem_size,
+  const void* head,
+  size_t head_size,
+  const char* path
+);
 // Take a snapshot of the device memory content and write it to a Binary file.
 // The binary data will follow a header section.
 //
@@ -112,10 +131,21 @@ extern void snapshot_devmem(
   size_t head_size,
   const char* path
 );
-// Take a snapshot of the device memory content and write it to a Binary file.
-//
-// WARNING: Be aware of endianess.
-extern void snapshot_devmem(const DeviceMemorySlice& devmem, const char* path);
+// Buffer snapshots with a `SnapshotCommonHeader` header is a `CommonSnapshot`.
+struct CommonSnapshot {
+  // Dynamically allocated data buffer.
+  void* data;
+  // Size of `data` in bytes.
+  size_t size;
+  // Type code of snapshot content.
+  uint32_t type;
+  // Whether the buffer producer is an little endian machine.
+  bool is_le;
+};
+// Import buffer snapshot from local storage.
+extern CommonSnapshot import_common_snapshot(const char* path);
+// Release the resources allocated for the imported snapshot.
+extern void destroy_common_snapshot(CommonSnapshot& snapshot);
 
 enum FramebufferSnapshotFormat {
   L_EXT_FRAMEBUFFER_SNAPSHOT_FORMAT_AUTO,

@@ -969,23 +969,63 @@ std::vector<Mesh> import_meshes_from_file(const char* path) {
 #endif // L_USE_ASSIMP
 }
 
+void snapshot_hostmem(
+  const void* hostmem,
+  size_t hostmem_size,
+  const void* head,
+  size_t head_size,
+  const char* path
+) {
+  if (hostmem_size == 0) {
+    liong::log::warn("taking a snapshot of zero size");
+  }
+  std::fstream f(path, std::ios::out | std::ios::binary);
+  f.write((const char*)head, head_size);
+  f.write((const char*)hostmem, hostmem_size);
+  f.close();
+  liong::log::info("took a buffer snapshot to file: ", path);
+}
 void snapshot_devmem(
   const DeviceMemorySlice& devmem,
   const void* head,
   size_t head_size,
   const char* path
 ) {
-  std::fstream f(path, std::ios::out | std::ios::binary);
   auto temp = std::malloc(devmem.size);
-  f.write((const char*)head, head_size);
   download_mem(devmem, temp, devmem.size);
-  f.write((const char*)temp, devmem.size);
+  snapshot_hostmem(temp, devmem.size, head, head_size, path);
   std::free(temp);
-  f.close();
-  liong::log::info("took snapshot of device memory to file: ", path);
 }
 void snapshot_devmem(const DeviceMemorySlice& devmem, const char* path) {
   snapshot_devmem(devmem, nullptr, 0, path);
+}
+
+CommonSnapshot import_common_snapshot(const char* path) {
+  std::fstream f(path, std::ios::in | std::ios::binary);
+  SnapshotCommonHeader head;
+  ASSERT << (f.readsome((char*)&head, sizeof(head)) == sizeof(head))
+    << "unexpected eof";
+  
+  const char* magic_str = (const char*)&head.magic;
+  bool is_le;
+  if (magic_str[0] == '3' && magic_str[1] == 'J' && magic_str[2] == 'L' && magic_str[3] == 0x89) {
+    is_le = true;
+  } else if (magic_str[0] == 0x89 && magic_str[1] == 'L' && magic_str[2] == 'J' && magic_str[3] == '3') {
+    is_le = false;
+  } else {
+    ASSERT << false
+      << "imported file is not a common snapshot";
+  }
+
+  auto data = std::malloc(head.size);
+  ASSERT << (f.readsome((char*)&data, head.size) == head.size)
+    << "snapshot content is shorter than declared";
+  
+  return CommonSnapshot { data, head.size, head.type, is_le };
+}
+void destroy_common_snapshot(CommonSnapshot& snapshot) {
+  std::free(snapshot.data);
+  snapshot = {};
 }
 
 void _snapshot_framebuf_bmp(const Framebuffer& framebuf, std::fstream& f) {
