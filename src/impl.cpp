@@ -1001,7 +1001,10 @@ void snapshot_devmem(const DeviceMemorySlice& devmem, const char* path) {
 }
 
 CommonSnapshot import_common_snapshot(const char* path) {
-  std::fstream f(path, std::ios::in | std::ios::binary);
+  std::fstream f(path, std::ios::in | std::ios::binary | std::ios::ate);
+  auto size = (size_t)f.tellg() - sizeof(SnapshotCommonHeader);
+  f.seekg(0, std::ios::beg);
+
   SnapshotCommonHeader head;
   ASSERT << (f.readsome((char*)&head, sizeof(head)) == sizeof(head))
     << "unexpected eof";
@@ -1016,13 +1019,14 @@ CommonSnapshot import_common_snapshot(const char* path) {
     ASSERT << false
       << "imported file is not a common snapshot";
   }
-
-  auto size = head.stride * head.nelem;
+  if (head.stride != 0) {
+    size = head.stride * head.dim.x * head.dim.y * head.dim.z * head.dim.w;
+  }
   auto data = std::malloc(size);
   ASSERT << (f.readsome((char*)&data, size) == size)
     << "snapshot content is shorter than declared";
   
-  return CommonSnapshot { data, size, head.type, is_le };
+  return CommonSnapshot { data, head.type, head.stride, head.dim, is_le };
 }
 void destroy_common_snapshot(CommonSnapshot& snapshot) {
   std::free(snapshot.data);

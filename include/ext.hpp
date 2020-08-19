@@ -114,11 +114,13 @@ struct SnapshotCommonHeader {
   // Type code of snapshot content. If a snapshot type has multiple versions,
   // version number or other semantical constructs should be encoded here.
   uint32_t type;
-  // Size of data element in bytes. The import procedure will enforce to consume
-  // at least and no more than this amount of data.
-  uint32_t stride;
+  // Optional size of data element in bytes. If `stride` is not zero, the import
+  // procedure will enforce to consume at least and no more than this amount of
+  // data; otherwise, it will exhaust the file and it will be the application's
+  // work to infer the correct amount of data.
+  uint32_t stride = 0;
   // Dimensions of homogeneous data element in `data`.
-  uint4 dim;
+  uint4 dim = { 1, 1, 1, 1 };
 };
 // Take a snapshot of host memory content and writei it to a binary file. The
 // binary data will follow a header section.
@@ -145,15 +147,20 @@ extern void snapshot_devmem(
 struct CommonSnapshot {
   // Dynamically allocated data buffer.
   void* data;
-  // Number of homogeneous data element in `data`.
-  uint64_t nelem;
-  // Size of data element in bytes. The import procedure will enforce to consume
-  // at least and no more than this amount of data.
-  uint64_t stride;
   // Type code of snapshot content.
   uint32_t type;
+  // Size of data element in bytes. The import procedure will enforce to consume
+  // at least and no more than this amount of data.
+  uint32_t stride;
+  // Number of homogeneous data element in `data`. Tensors should be filled in
+  // column major order.
+  uint4 dim;
   // Whether the buffer producer is an little endian machine.
   bool is_le;
+
+  constexpr size_t nelem() const {
+    return dim.x * dim.y * dim.z * dim.w * stride;
+  }
 };
 // Import buffer snapshot from local storage.
 extern CommonSnapshot import_common_snapshot(const char* path);
