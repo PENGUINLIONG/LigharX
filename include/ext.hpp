@@ -114,6 +114,10 @@ struct SnapshotCommonHeader {
   // Size of the element type, excluding this header, used for validation.
   uint64_t size;
 };
+// Take a snapshot of host memory content and writei it to a binary file. The
+// binary data will follow a header section.
+//
+// WARNING: Be aware of endianess.
 extern void snapshot_hostmem(
   const void* hostmem,
   size_t hostmem_size,
@@ -121,8 +125,8 @@ extern void snapshot_hostmem(
   size_t head_size,
   const char* path
 );
-// Take a snapshot of the device memory content and write it to a Binary file.
-// The binary data will follow a header section.
+// Take a snapshot of device memory content and write it to a binary file. The
+// binary data will follow a header section.
 //
 // WARNING: Be aware of endianess.
 extern void snapshot_devmem(
@@ -135,7 +139,9 @@ extern void snapshot_devmem(
 struct CommonSnapshot {
   // Dynamically allocated data buffer.
   void* data;
-  // Size of `data` in bytes.
+  // Size of `data` in bytes. It can be set to zero and let the consumer
+  // application determine how much data is a valid amount. The import procedure
+  // will enforce to consume exactly this amount of data.
   size_t size;
   // Type code of snapshot content.
   uint32_t type;
