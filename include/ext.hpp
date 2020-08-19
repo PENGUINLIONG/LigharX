@@ -103,19 +103,22 @@ inline void cmd_build_sobjs(
 
 
 struct SnapshotCommonHeader {
-  // Snapshot magic number, MUST be set to `0x894C4A33` (.LJ3 in big endian).
+  // Snapshot magic number, MUST be set to `0x894C4A33` (`.LJ3` in big endian,
+  // note that the fist character is not a char but a non-textual character).
   // The magic number can also be used to identify endian. Please ensure you
   // initialized the header with `init_snapshot_common_header`, so this field is
   // correctly filled.
   uint32_t magic = 0x894C4A33;
+  // Common header version.
+  uint32_t version = 0x0000001;
   // Type code of snapshot content. If a snapshot type has multiple versions,
   // version number or other semantical constructs should be encoded here.
   uint32_t type;
-  // Number of homogeneous data element in `data`.
-  uint64_t nelem;
   // Size of data element in bytes. The import procedure will enforce to consume
   // at least and no more than this amount of data.
-  uint64_t stride;
+  uint32_t stride;
+  // Dimensions of homogeneous data element in `data`.
+  uint4 dim;
 };
 // Take a snapshot of host memory content and writei it to a binary file. The
 // binary data will follow a header section.
