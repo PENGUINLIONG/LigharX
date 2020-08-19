@@ -3,14 +3,17 @@
 // @PENGUINLIONG
 #include <cstdint>
 #include <cmath>
+#include <algorithm>
 #include <optix_stubs.h>
 #ifdef __CUDACC__
 #include <optix_device.h>
 // Cross-platform compilable function.
 #define X __forceinline__ __device__
+#define CONST_BUF __constant__
 #else
 #include <optix.h>
 #define X inline
+#define CONST_BUF static const
 #endif // __CUDACC__
 #include "vector_math.h"
 
@@ -90,6 +93,16 @@ constexpr float deg2rad(float deg) {
 }
 constexpr float rad2deg(float deg) {
   return deg / M_PI * 180.0f;
+}
+
+constexpr float get_aabb_longest_axis(const OptixAabb& aabb) {
+  return std::max(
+    std::max(
+      aabb.maxX - aabb.minX,
+      aabb.maxY - aabb.minY
+    ),
+    aabb.maxZ - aabb.minZ
+  );
 }
 
 // An 3x4 (float32) matrix transform.
