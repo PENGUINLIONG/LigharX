@@ -33,6 +33,11 @@
 
 namespace liong {
 
+struct Ray {
+  float3 o;
+  float3 v;
+};
+
 constexpr float4 make_pt(float x, float y, float z) {
   return float4{ x, y, z, 1.0f };
 }

@@ -12,10 +12,6 @@ namespace liong {
 // ## Predefined Types
 //
 
-struct Ray {
-  float3 o;
-  float3 v;
-};
 // Everything valuable during the lifetime of a ray.
 template<typename TRes>
 struct RayLife {
