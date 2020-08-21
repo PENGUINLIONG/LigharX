@@ -1002,14 +1002,16 @@ void snapshot_devmem(const DeviceMemorySlice& devmem, const char* path) {
 
 CommonSnapshot import_common_snapshot(const char* path) {
   std::fstream f(path, std::ios::in | std::ios::binary | std::ios::ate);
-  auto size = (size_t)f.tellg() - sizeof(SnapshotCommonHeader);
-  f.seekg(0, std::ios::beg);
+  ASSERT << f.is_open()
+    << std::string("cannot open common snapshot: ") + path;
+  auto size = f.tellg();
+  f.seekg(std::ios::beg, 0);
 
   SnapshotCommonHeader head;
-  ASSERT << (f.readsome((char*)&head, sizeof(head)) == sizeof(head))
-    << "unexpected eof";
+  f.read((char*)&head, sizeof(head));
+  size -= sizeof(SnapshotCommonHeader);
   
-  const char* magic_str = (const char*)&head.magic;
+  const uint8_t* magic_str = (const uint8_t*)&head.magic;
   bool is_le;
   if (magic_str[0] == '3' && magic_str[1] == 'J' && magic_str[2] == 'L' && magic_str[3] == 0x89) {
     is_le = true;
@@ -1017,15 +1019,16 @@ CommonSnapshot import_common_snapshot(const char* path) {
     is_le = false;
   } else {
     ASSERT << false
-      << "imported file is not a common snapshot";
+      << std::string("imported file is not a common snapshot: ") + path;
   }
   if (head.stride != 0) {
     size = head.stride * head.dim.x * head.dim.y * head.dim.z * head.dim.w;
   }
   auto data = std::malloc(size);
-  ASSERT << (f.readsome((char*)&data, size) == size)
-    << "snapshot content is shorter than declared";
-  
+  f.read((char*)data, size);
+  // TODO: (penguinliong) Ensure craps are read in the correct size.
+
+  liong::log::info("imported common snapshot: ", path);
   return CommonSnapshot { data, head.type, head.stride, head.dim, is_le };
 }
 void destroy_common_snapshot(CommonSnapshot& snapshot) {
@@ -1033,17 +1036,19 @@ void destroy_common_snapshot(CommonSnapshot& snapshot) {
   snapshot = {};
 }
 
-void _snapshot_framebuf_bmp(const Framebuffer& framebuf, std::fstream& f) {
+void _snapshot_framebuf_bmp(
+  const void* hostmem,
+  uint32_t w,
+  uint32_t h,
+  PixelFormat fmt,
+  std::fstream& f) {
   f.write("BM", 2);
-  ASSERT << (framebuf.dim.z == 1)
-    << "cannot take snapshot of 3d framebuffer";
-  uint32_t img_size = framebuf.framebuf_devmem.size;
+  uint32_t img_size = w * h * fmt.get_fmt_size();
   uint32_t bmfile_hdr[] = { 14 + 108 + img_size, 0, 14 + 108 };
   f.write((const char*)bmfile_hdr, sizeof(bmfile_hdr));
   uint32_t bmcore_hdr[] = {
     108, // Size of header, here we use `BITMAPINFOHEADER`.
-    framebuf.dim.x,
-    framebuf.dim.y,
+    w, h,
     1 | // Number of color planes.
     (32 << 16), // Bits per pixel.
     3, // Compression. (BI_BITFIELDS)
@@ -1063,23 +1068,25 @@ void _snapshot_framebuf_bmp(const Framebuffer& framebuf, std::fstream& f) {
     0, // Blue gamma.
   };
   f.write((const char*)bmcore_hdr, sizeof(bmcore_hdr));
-  auto hostmem_size = framebuf.framebuf_devmem.size;
-  auto hostmem = std::malloc(hostmem_size);
-  download_mem(framebuf.framebuf_devmem, hostmem, hostmem_size);
   uint8_t buf;
-  for (auto i = 0; i < framebuf.dim.y; ++i) {
-    for (auto j = 0; j < framebuf.dim.x; ++j) {
-      for (auto k = 0; k < framebuf.fmt.get_ncomp(); ++k) {
-        buf = framebuf.fmt.extract(hostmem, i * framebuf.dim.x + j, k) * 255.99;
+  for (auto i = 0; i < h; ++i) {
+    for (auto j = 0; j < w; ++j) {
+      for (auto k = 0; k < 4; ++k) {
+        buf = fmt.extract(hostmem, (h - i - 1) * w + j, k) * 255.99;
         f.write((const char*)&buf, sizeof(buf));
       }
     }
   }
-  std::free(hostmem);
   f.flush();
   f.close();
 }
-void _snapshot_framebuf_exr(const Framebuffer& framebuf, std::fstream& f) {
+void _snapshot_framebuf_exr(
+  const void* framebuf,
+  uint32_t w,
+  uint32_t h,
+  PixelFormat fmt,
+  std::fstream& f
+) {
   throw std::logic_error("not implemented yet");
 }
 FramebufferSnapshotFormat infer_snapshot_fmt(const char* path) {
@@ -1095,12 +1102,19 @@ FramebufferSnapshotFormat infer_snapshot_fmt(const char* path) {
     return L_EXT_FRAMEBUFFER_SNAPSHOT_FORMAT_AUTO;
   }
   pos++; // Omit the dot.
-  if (std::strcmp(pos, "bmp") == 0) { return L_EXT_FRAMEBUFFER_SNAPSHOT_FORMAT_BMP; }
-  if (std::strcmp(pos, "exr") == 0) { return L_EXT_FRAMEBUFFER_SNAPSHOT_FORMAT_EXR; }
+  if (std::strcmp(pos, "bmp") == 0) {
+    return L_EXT_FRAMEBUFFER_SNAPSHOT_FORMAT_BMP;
+  }
+  if (std::strcmp(pos, "exr") == 0) {
+    return L_EXT_FRAMEBUFFER_SNAPSHOT_FORMAT_EXR;
+  }
   return L_EXT_FRAMEBUFFER_SNAPSHOT_FORMAT_AUTO;
 }
-void snapshot_framebuf(
-  const Framebuffer& framebuf,
+void snapshot_host_framebuf(
+  const void* framebuf,
+  uint32_t w,
+  uint32_t h,
+  PixelFormat fmt,
   const char* path,
   FramebufferSnapshotFormat framebuf_snapshot_fmt
 ) {
@@ -1112,14 +1126,28 @@ void snapshot_framebuf(
     << "cannot infer snapshot format";
   switch (framebuf_snapshot_fmt) {
   case L_EXT_FRAMEBUFFER_SNAPSHOT_FORMAT_BMP:
-    _snapshot_framebuf_bmp(framebuf, f);
+    _snapshot_framebuf_bmp(framebuf, w, h, fmt, f);
     break;
   case L_EXT_FRAMEBUFFER_SNAPSHOT_FORMAT_EXR:
-    _snapshot_framebuf_exr(framebuf, f);
+    _snapshot_framebuf_exr(framebuf, w, h, fmt, f);
     break;
   }
   f.close();
-  liong::log::info("took snapshot of framebuffer to exr file: ", path);
+  liong::log::info("took snapshot of framebuffer to file: ", path);
+}
+void snapshot_framebuf(
+  const Framebuffer& framebuf,
+  const char* path,
+  FramebufferSnapshotFormat framebuf_snapshot_fmt
+) {
+  ASSERT << (framebuf.dim.z == 1)
+    << "cannot take snapshot of 3d framebuffer";
+  auto hostmem_size = framebuf.framebuf_devmem.size;
+  auto hostmem = std::malloc(hostmem_size);
+  download_mem(framebuf.framebuf_devmem, hostmem, hostmem_size);
+  snapshot_host_framebuf(hostmem, framebuf.dim.x, framebuf.dim.y, framebuf.fmt,
+    path, framebuf_snapshot_fmt);
+  std::free(hostmem);
 }
 
 } // namespace ext

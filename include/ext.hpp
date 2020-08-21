@@ -159,7 +159,10 @@ struct CommonSnapshot {
   bool is_le;
 
   constexpr size_t nelem() const {
-    return dim.x * dim.y * dim.z * dim.w * stride;
+    return dim.x * dim.y * dim.z * dim.w;
+  }
+  constexpr size_t size() const {
+    return nelem() * stride;
   }
 };
 // Import buffer snapshot from local storage.
@@ -189,6 +192,24 @@ inline void snapshot_framebuf(
   const char* path
 ) {
   snapshot_framebuf(framebuf, path, L_EXT_FRAMEBUFFER_SNAPSHOT_FORMAT_AUTO);
+}
+extern void snapshot_host_framebuf(
+  const void* framebuf,
+  const uint32_t w,
+  const uint32_t h,
+  PixelFormat fmt,
+  const char* path,
+  FramebufferSnapshotFormat framebuf_snapshot_fmt
+);
+inline void snapshot_host_framebuf(
+  const void* framebuf,
+  const uint32_t w,
+  const uint32_t h,
+  PixelFormat fmt,
+  const char* path
+) {
+  snapshot_host_framebuf(framebuf, w, h, fmt, path,
+    L_EXT_FRAMEBUFFER_SNAPSHOT_FORMAT_AUTO);
 }
 
 } // namespace ext

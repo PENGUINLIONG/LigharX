@@ -91,7 +91,7 @@ struct TypedArgumentParser<int32_t> {
 };
 template<>
 struct TypedArgumentParser<uint32_t> {
-  typedef int arg_ty;
+  typedef uint32_t arg_ty;
   static const uint32_t narg = 1;
   static bool parse(const char* lit[], void* dst) {
     *(uint32_t*)dst = std::atoi(lit[0]);
