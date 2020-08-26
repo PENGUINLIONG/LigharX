@@ -33,15 +33,15 @@ void init_arg_parse(const char* app_name, const char* desc) {
 }
 void print_help() {
   std::cout << "usage: " << arg_cfg.app_name << " [OPTIONS]" << std::endl;
+  if (!arg_cfg.desc.empty()) {
+    std::cout << arg_cfg.desc << std::endl;
+  }
   for (const auto& help : arg_cfg.helps) {
     std::cout << help.short_flag << "\t"
       << help.long_flag << "\t\t"
       << help.help << std::endl;
   }
   std::cout << "-h\t--help\t\tPrint this message." << std::endl;
-  if (!arg_cfg.desc.empty()) {
-    std::cout << arg_cfg.desc << std::endl;
-  }
   std::exit(0);
 }
 void report_unknown_arg(const char* arg) {

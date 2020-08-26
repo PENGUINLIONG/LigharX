@@ -9,7 +9,7 @@
 #include <optix_device.h>
 // Cross-platform compilable function.
 #define X __forceinline__ __device__
-#define CONST_BUF __constant__
+#define CONST_BUF static __constant__
 #else
 #include <optix.h>
 #define X inline

@@ -9,6 +9,9 @@
 #include "ext.hpp"
 #include "log.hpp"
 #include "except.hpp"
+#ifdef L_USE_EXR
+#include <OpenEXR/ImfRgbaFile.h>
+#endif
 // !!! MUST ONLY DEFINE ONCE !!!
 #include <optix_function_table_definition.h>
 
@@ -469,7 +472,8 @@ Framebuffer create_framebuf(
 ) {
   ASSERT << ((dim.x != 0) && (dim.y != 0) && (dim.z != 0))
     << "framebuffer size cannot be zero";
-  auto framebuf_devmem = alloc_mem(fmt.get_fmt_size() * dim.x * dim.y * dim.z);
+  auto size = (size_t)fmt.get_fmt_size() * dim.x * dim.y * dim.z;
+  auto framebuf_devmem = alloc_mem(size);
   liong::log::info("created framebuffer (width=", dim.x, ", height=", dim.y,
     ", depth=", dim.z, ")");
   return Framebuffer { fmt, dim, framebuf_devmem };
@@ -979,7 +983,7 @@ void snapshot_hostmem(
   if (hostmem_size == 0) {
     liong::log::warn("taking a snapshot of zero size");
   }
-  std::fstream f(path, std::ios::out | std::ios::binary);
+  std::fstream f(path, std::ios::out | std::ios::binary | std::ios::trunc);
   f.write((const char*)head, head_size);
   f.write((const char*)hostmem, hostmem_size);
   f.close();
@@ -1041,7 +1045,9 @@ void _snapshot_framebuf_bmp(
   uint32_t w,
   uint32_t h,
   PixelFormat fmt,
-  std::fstream& f) {
+  const char* path
+) {
+  std::fstream f(path, std::ios::out | std::ios::binary | std::ios::trunc);
   f.write("BM", 2);
   uint32_t img_size = w * h * fmt.get_fmt_size();
   uint32_t bmfile_hdr[] = { 14 + 108 + img_size, 0, 14 + 108 };
@@ -1085,9 +1091,31 @@ void _snapshot_framebuf_exr(
   uint32_t w,
   uint32_t h,
   PixelFormat fmt,
-  std::fstream& f
+  const char* path
 ) {
-  throw std::logic_error("not implemented yet");
+#ifdef L_USE_EXR
+  using namespace Imf_2_5;
+  Rgba* buf = new Rgba[w * h];
+  RgbaOutputFile out_file(path, w, h);
+  out_file.setFrameBuffer(buf, 1, w);
+  for (auto i = 0; i < h; ++i) {
+    for (auto j = 0; j < w; ++j) {
+      auto idx = i * w + j;
+      // Color channel order can be absurd so keep it verbose.
+      Rgba rgba;
+      rgba.r = fmt.extract(framebuf, idx, 0);
+      rgba.g = fmt.extract(framebuf, idx, 1);
+      rgba.b = fmt.extract(framebuf, idx, 2);
+      rgba.a = fmt.extract(framebuf, idx, 3);
+      buf[idx] = std::move(rgba);
+    }
+  }
+  out_file.writePixels(h);
+  delete[] buf;
+#else
+  ASSERT << false
+    << "lighar was not linked with openexr; exr snapshot is not disabled";
+#endif
 }
 FramebufferSnapshotFormat infer_snapshot_fmt(const char* path) {
   auto len = std::strlen(path);
@@ -1118,7 +1146,7 @@ void snapshot_host_framebuf(
   const char* path,
   FramebufferSnapshotFormat framebuf_snapshot_fmt
 ) {
-  std::fstream f(path, std::ios::out | std::ios::binary);
+  std::fstream f(path, std::ios::out | std::ios::binary | std::ios::trunc);
   if (framebuf_snapshot_fmt == L_EXT_FRAMEBUFFER_SNAPSHOT_FORMAT_AUTO) {
     framebuf_snapshot_fmt = infer_snapshot_fmt(path);
   }
@@ -1126,10 +1154,10 @@ void snapshot_host_framebuf(
     << "cannot infer snapshot format";
   switch (framebuf_snapshot_fmt) {
   case L_EXT_FRAMEBUFFER_SNAPSHOT_FORMAT_BMP:
-    _snapshot_framebuf_bmp(framebuf, w, h, fmt, f);
+    _snapshot_framebuf_bmp(framebuf, w, h, fmt, path);
     break;
   case L_EXT_FRAMEBUFFER_SNAPSHOT_FORMAT_EXR:
-    _snapshot_framebuf_exr(framebuf, w, h, fmt, f);
+    _snapshot_framebuf_exr(framebuf, w, h, fmt, path);
     break;
   }
   f.close();
