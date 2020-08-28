@@ -13,6 +13,8 @@ struct ArgumentParseConfig {
   uint32_t narg;
   // Returns true if the parsing is successful.
   bool (*parser)(const char*[], void*);
+  // Returns the literal of default value.
+  std::string (*lit)(const void*);
   // Destination to be written with parsed value.
   void* dst;
 };
@@ -31,6 +33,7 @@ ArgumentParseConfig make_parse_cfg(void* dst) {
   parse_cfg.narg = TTypedParser::narg;
   parse_cfg.dst = dst;
   parse_cfg.parser = &TTypedParser::parse;
+  parse_cfg.lit = &TTypedParser::lit;
   return parse_cfg;
 }
 // Register customized argument parsing.
@@ -70,6 +73,9 @@ struct TypedArgumentParser {
   static bool parse(const char* lit[], void* dst) {
     return false;
   }
+  static std::string lit(const void* src) {
+    return {};
+  }
 };
 template<>
 struct TypedArgumentParser<std::string> {
@@ -78,6 +84,9 @@ struct TypedArgumentParser<std::string> {
   static bool parse(const char* lit[], void* dst) {
     *(std::string*)dst = lit[0];
     return true;
+  }
+  static std::string lit(const void* src) {
+    return *(const std::string*)src;
   }
 };
 template<>
@@ -88,6 +97,9 @@ struct TypedArgumentParser<int32_t> {
     *(int32_t*)dst = std::atoi(lit[0]);
     return true;
   }
+  static std::string lit(const void* src) {
+    return std::to_string(*(const arg_ty*)src);
+  }
 };
 template<>
 struct TypedArgumentParser<uint32_t> {
@@ -96,6 +108,9 @@ struct TypedArgumentParser<uint32_t> {
   static bool parse(const char* lit[], void* dst) {
     *(uint32_t*)dst = std::atoi(lit[0]);
     return true;
+  }
+  static std::string lit(const void* src) {
+    return std::to_string(*(const arg_ty*)src);
   }
 };
 template<>
@@ -106,6 +121,9 @@ struct TypedArgumentParser<float> {
     *(float*)dst = std::atof(lit[0]);
     return true;
   }
+  static std::string lit(const void* src) {
+    return std::to_string(*(const arg_ty*)src);
+  }
 };
 template<>
 struct TypedArgumentParser<int2> {
@@ -114,6 +132,10 @@ struct TypedArgumentParser<int2> {
   static bool parse(const char* lit[], void* dst) {
     *(int2*)dst = make_int2(std::atoi(lit[0]), std::atoi(lit[1]));
     return true;
+  }
+  static std::string lit(const void* src) {
+    auto v = (const arg_ty*)src;
+    return std::to_string(v->x) + " " + std::to_string(v->y);
   }
 };
 template<>
@@ -124,6 +146,10 @@ struct TypedArgumentParser<uint2> {
     *(uint2*)dst = make_uint2(std::atoi(lit[0]), std::atoi(lit[1]));
     return true;
   }
+  static std::string lit(const void* src) {
+    auto v = (const arg_ty*)src;
+    return std::to_string(v->x) + " " + std::to_string(v->y);
+  }
 };
 template<>
 struct TypedArgumentParser<float2> {
@@ -132,6 +158,10 @@ struct TypedArgumentParser<float2> {
   static bool parse(const char* lit[], void* dst) {
     *(float2*)dst = make_float2(std::atof(lit[0]), std::atof(lit[1]));
     return true;
+  }
+  static std::string lit(const void* src) {
+    auto v = (const arg_ty*)src;
+    return std::to_string(v->x) + " " + std::to_string(v->y);
   }
 };
 template<>
@@ -143,6 +173,11 @@ struct TypedArgumentParser<int3> {
       std::atoi(lit[2]));
     return true;
   }
+  static std::string lit(const void* src) {
+    auto v = (const arg_ty*)src;
+    return std::to_string(v->x) + " " + std::to_string(v->y) + " " +
+      std::to_string(v->z);
+  }
 };
 template<>
 struct TypedArgumentParser<uint3> {
@@ -152,6 +187,11 @@ struct TypedArgumentParser<uint3> {
     *(uint3*)dst = make_uint3(std::atoi(lit[0]), std::atoi(lit[1]),
       std::atoi(lit[2]));
     return true;
+  }
+  static std::string lit(const void* src) {
+    auto v = (const arg_ty*)src;
+    return std::to_string(v->x) + " " + std::to_string(v->y) + " " +
+      std::to_string(v->z);
   }
 };
 template<>
@@ -163,6 +203,11 @@ struct TypedArgumentParser<float3> {
       std::atof(lit[2]));
     return true;
   }
+  static std::string lit(const void* src) {
+    auto v = (const arg_ty*)src;
+    return std::to_string(v->x) + " " + std::to_string(v->y) + " " +
+      std::to_string(v->z);
+  }
 };
 template<>
 struct TypedArgumentParser<int4> {
@@ -172,6 +217,11 @@ struct TypedArgumentParser<int4> {
     *(int4*)dst = make_int4(std::atoi(lit[0]), std::atoi(lit[1]),
       std::atoi(lit[2]), std::atoi(lit[3]));
     return true;
+  }
+  static std::string lit(const void* src) {
+    auto v = (const arg_ty*)src;
+    return std::to_string(v->x) + " " + std::to_string(v->y) + " " +
+      std::to_string(v->z) + " " + std::to_string(v->w);
   }
 };
 template<>
@@ -183,6 +233,11 @@ struct TypedArgumentParser<uint4> {
       std::atoi(lit[2]), std::atoi(lit[3]));
     return true;
   }
+  static std::string lit(const void* src) {
+    auto v = (const arg_ty*)src;
+    return std::to_string(v->x) + " " + std::to_string(v->y) + " " +
+      std::to_string(v->z) + " " + std::to_string(v->w);
+  }
 };
 template<>
 struct TypedArgumentParser<float4> {
@@ -192,6 +247,11 @@ struct TypedArgumentParser<float4> {
     *(float4*)dst = make_float4(std::atof(lit[0]), std::atof(lit[1]),
       std::atof(lit[2]), std::atof(lit[3]));
     return true;
+  }
+  static std::string lit(const void* src) {
+    auto v = (const arg_ty*)src;
+    return std::to_string(v->x) + " " + std::to_string(v->y) + " " +
+      std::to_string(v->z) + " " + std::to_string(v->w);
   }
 };
 // NOTE: This is used for arguments like `-f true` and `-f false`. If you need a
@@ -212,6 +272,13 @@ struct TypedArgumentParser<bool> {
       return false;
     }
   }
+  static std::string lit(const void* src) {
+    if (*(const arg_ty*)src) {
+      return "true";
+    } else {
+      return "false";
+    }
+  }
 };
 struct SwitchArgumentParser {
   typedef bool arg_ty;
@@ -219,6 +286,9 @@ struct SwitchArgumentParser {
   static bool parse(const char* lit[], void* dst) {
     *(bool*)dst = true;
     return true;
+  }
+  static std::string lit(const void* src) {
+    return {};
   }
 };
 

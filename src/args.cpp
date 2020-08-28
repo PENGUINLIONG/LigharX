@@ -64,7 +64,12 @@ void reg_arg(
     arg_cfg.long_map[long_flag + 2] = i;
   }
   arg_cfg.parse_cfgs.emplace_back(parse_cfg);
-  ArgumentHelp arg_help { short_flag, long_flag, help };
+  std::string help_str = help;
+  auto lit = parse_cfg.lit(parse_cfg.dst);
+  if (!lit.empty()) {
+    help_str += " (default=" + lit + ")";
+  }
+  ArgumentHelp arg_help { short_flag, long_flag, help_str };
   arg_cfg.helps.emplace_back(std::move(arg_help));
 }
 
