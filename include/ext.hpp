@@ -212,6 +212,8 @@ inline void snapshot_host_framebuf(
     L_EXT_FRAMEBUFFER_SNAPSHOT_FORMAT_AUTO);
 }
 
+extern Image import_image_exr(const char* path);
+
 } // namespace ext
 
 } // namespace liong

@@ -312,6 +312,11 @@ struct Framebuffer {
   uint3 dim;
   DeviceMemory framebuf_devmem;
 };
+struct Image {
+  PixelFormat fmt;
+  uint3 dim;
+  void* data;
+};
 
 
 

@@ -486,6 +486,28 @@ void destroy_framebuf(Framebuffer& framebuf) {
   liong::log::info("destroyed framebuffer");
 }
 
+Image create_image(
+  PixelFormat fmt,
+  uint3 dim
+) {
+  ASSERT << ((dim.x != 0) && (dim.y != 0) && (dim.z != 0))
+    << "framebuffer size cannot be zero";
+  auto size = (size_t)fmt.get_fmt_size() * dim.x * dim.y * dim.z;
+  auto data = std::malloc(size);
+  liong::log::info("created image (width=", dim.x, ", height=", dim.y,
+    ", depth=", dim.z, ")");
+  return Image { fmt, dim, data };
+}
+void destroy_image(Image& img) {
+  if (img.data) {
+    std::free(img.data);
+  }
+  img = {};
+  liong::log::info("destroyed image");
+}
+
+
+
 Mesh create_mesh(const MeshConfig& mesh_cfg) {
   auto vert_buf_offset = 0;
   auto vert_buf_size = mesh_cfg.nvert * mesh_cfg.vert_stride;
@@ -1176,6 +1198,46 @@ void snapshot_framebuf(
   snapshot_host_framebuf(hostmem, framebuf.dim.x, framebuf.dim.y, framebuf.fmt,
     path, framebuf_snapshot_fmt);
   std::free(hostmem);
+}
+
+Image import_image_exr(const char* path) {
+  using namespace Imf_2_5;
+  RgbaInputFile in_file(path);
+  auto& hdr = in_file.header();
+  auto& wnd = hdr.displayWindow();
+  auto dim = wnd.size();
+  uint32_t w = dim.x + 1;
+  uint32_t h = dim.y + 1;
+  auto npx = w * h;
+  auto fb = new Rgba[npx];
+  in_file.setFrameBuffer(fb, 1, w);
+  for (auto i = 0; i < h; ++i) {
+    in_file.readPixels(i);
+  }
+  auto data = (float4*)std::malloc(npx * sizeof(float4));
+  if (in_file.lineOrder() == LineOrder::INCREASING_Y) {
+    for (auto i = 0; i < h; ++i) {
+      auto line_offset = (h - i - 1) * w;
+      for (auto j = 0; j < w; ++j) {
+        const auto& px = fb[line_offset + j];
+        data[line_offset + j] = make_float4(px.r, px.g, px.b, px.a);
+      }
+    }
+  } else {
+    for (auto i = 0; i < h; ++i) {
+      auto line_offset = i * w;
+      for (auto j = 0; j < w; ++j) {
+        const auto& px = fb[line_offset + j];
+        data[line_offset + j] = make_float4(px.r, px.g, px.b, px.a);
+      }
+    }
+  }
+  delete[] fb;
+  return Image {
+    L_FORMAT_R32G32B32A32_SFLOAT,
+    { w, h, 1 },
+    data,
+  };
 }
 
 } // namespace ext

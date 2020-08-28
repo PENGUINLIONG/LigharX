@@ -96,6 +96,12 @@ extern Framebuffer create_framebuf(
 );
 extern void destroy_framebuf(Framebuffer& framebuf);
 
+extern Image create_img(
+  PixelFormat fmt,
+  uint3 dim
+);
+extern void destroy_img(Image& img);
+
 
 
 // Create a mesh. The mesh data will be copied to the device side so it will be
