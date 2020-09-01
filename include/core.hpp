@@ -246,18 +246,5 @@ void cmd_compact_mem(
 ) {
   cmd_compact_mem(transact, ctxt, *x.inner);
 }
-template<typename TTrav,
-  typename _ = std::enable_if_t<std::is_same_v<
-  decltype(std::remove_pointer_t<typename decltype(TTrav::inner)>::trav),
-  OptixTraversableHandle>>>
-void cmd_compact_mems(
-  Transaction& transact,
-  const Context& ctxt,
-  const std::vector<TTrav>& xs
-) {
-  for (const auto& x : xs) {
-    cmd_compact_mem(transact, ctxt, *x.inner);
-  }
-}
 
 } // namespace liong

@@ -1,3 +1,4 @@
+#pragma once
 // # Sampling Utilities
 // @penguinliong
 //

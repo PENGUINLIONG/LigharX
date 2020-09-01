@@ -193,7 +193,6 @@ struct TextureConfig {
   TextureDimension dim;
   PixelFormat fmt;
   uint32_t w, h, d;
-  size_t row_align;
 };
 struct SamplerConfig {
   CUaddress_mode addr_mode;
@@ -316,6 +315,7 @@ struct Image {
   PixelFormat fmt;
   uint3 dim;
   void* data;
+  size_t size;
 };
 
 

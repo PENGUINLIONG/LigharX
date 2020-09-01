@@ -128,7 +128,7 @@ Texture create_tex(
   rsc_desc.res.pitch2D.numChannels = tex_cfg.fmt.get_ncomp();
   rsc_desc.res.pitch2D.width = tex_cfg.w;
   rsc_desc.res.pitch2D.height = tex_cfg.h;
-  rsc_desc.res.pitch2D.pitchInBytes = tex_cfg.row_align;
+  rsc_desc.res.pitch2D.pitchInBytes = tex_cfg.fmt.get_fmt_size() * tex_cfg.w;
   CUDA_TEXTURE_DESC tex_desc {};
   tex_desc.addressMode[0] = sampler_cfg.addr_mode;
   tex_desc.addressMode[1] = sampler_cfg.addr_mode;
@@ -1214,7 +1214,8 @@ Image import_image_exr(const char* path) {
   for (auto i = 0; i < h; ++i) {
     in_file.readPixels(i);
   }
-  auto data = (float4*)std::malloc(npx * sizeof(float4));
+  auto size = npx * sizeof(float4);
+  auto data = (float4*)std::malloc(size);
   if (in_file.lineOrder() == LineOrder::INCREASING_Y) {
     for (auto i = 0; i < h; ++i) {
       auto line_offset = (h - i - 1) * w;
@@ -1237,6 +1238,7 @@ Image import_image_exr(const char* path) {
     L_FORMAT_R32G32B32A32_SFLOAT,
     { w, h, 1 },
     data,
+    size,
   };
 }
 
