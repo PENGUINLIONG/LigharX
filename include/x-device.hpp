@@ -139,6 +139,10 @@ Ray perspect_ray(
     ray_flags,                                                                 \
     0, 1, 0, wLife[0], wLife[1]);                                              \
 }
+#define INTERPOLATE(buf, prim, bary)                                           \
+  buf[prim.y] * bary.x +                                                       \
+  buf[prim.z] * bary.y +                                                       \
+  buf[prim.x] * (1 - (bary.x + bary.y))
 
 
 
