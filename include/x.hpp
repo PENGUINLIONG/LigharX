@@ -40,6 +40,12 @@ struct Ray {
   float3 o;
   float3 v;
 };
+struct Light {
+  float3 o;
+  float3 v;
+  float3 rad;
+  float3 emit;
+};
 
 constexpr float4 make_pt(float x, float y, float z) {
   return float4{ x, y, z, 1.0f };
