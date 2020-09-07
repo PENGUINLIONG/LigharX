@@ -60,7 +60,11 @@ extern DeviceMemory shadow_mem(const void* buf, size_t size, size_t align = 1);
 
 
 
-extern Texture create_tex(const Context& ctxt, const TextureConfig& tex_cfg);
+extern Texture create_tex(
+  const Context& ctxt,
+  const TextureConfig& tex_cfg,
+  const SamplerConfig& sampler_cfg
+);
 extern void destroy_tex(Texture& tex);
 
 
