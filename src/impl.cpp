@@ -604,10 +604,9 @@ void destroy_scene(Scene& scene) {
 void add_scene_sobj(
   Scene& scene,
   const SceneObject& sobj,
-  const Transform& trans,
-  const DeviceMemorySlice& mat_devmem
+  const Transform& trans
 ) {
-  auto elem = SceneElement { sobj.inner, trans, mat_devmem };
+  auto elem = SceneElement { sobj.inner, trans };
   scene.elems.emplace_back(std::move(elem));
 }
 

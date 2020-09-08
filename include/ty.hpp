@@ -370,7 +370,6 @@ struct SceneElement {
   // This is borrowed from the children scene objects so remember to keep them alive.
   const AsFeedback* asfb;
   Transform trans;
-  DeviceMemorySlice mat_devmem;
 };
 // Traversable object collection.
 struct Scene {

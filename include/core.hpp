@@ -134,8 +134,7 @@ extern void destroy_scene(Scene& scene);
 extern void add_scene_sobj(
   Scene& scene,
   const SceneObject& sobj,
-  const Transform& trans,
-  const DeviceMemorySlice& mat_buf
+  const Transform& trans
 );
 
 
