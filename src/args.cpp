@@ -31,6 +31,9 @@ void init_arg_parse(const char* app_name, const char* desc) {
   arg_cfg.app_name = app_name;
   arg_cfg.desc = desc;
 }
+const char* get_app_name() {
+  return arg_cfg.app_name.c_str();
+}
 void print_help() {
   std::cout << "usage: " << arg_cfg.app_name << " [OPTIONS]" << std::endl;
   if (!arg_cfg.desc.empty()) {

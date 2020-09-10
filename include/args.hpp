@@ -21,9 +21,12 @@ struct ArgumentParseConfig {
 
 // Optionally initialize argument parser with application name and usage
 // description.
-void init_arg_parse(const char* app_name, const char* desc);
+extern void init_arg_parse(const char* app_name, const char* desc);
+// Get the name of this app set by the user. Empty string is returned if this
+// function is called before `init_arg_parse`.
+extern const char* get_app_name();
 // Print help message to the standard output.
-void print_help();
+extern void print_help();
 // Erase the type of argument parser and bind the type-erased parser to the
 // value destination. User code MUST ensure the `dst` buffer can contain the
 // parsing result.
@@ -37,7 +40,7 @@ ArgumentParseConfig make_parse_cfg(void* dst) {
   return parse_cfg;
 }
 // Register customized argument parsing.
-void reg_arg(
+extern void reg_arg(
   const char* short_flag,
   const char* long_flag,
   const ArgumentParseConfig& parse_cfg,
@@ -55,7 +58,7 @@ inline void reg_arg(
 }
 // Parse arguments. Arguments will be matched against argument parsers
 // registered before.
-void parse_args(int argc, const char** argv);
+extern void parse_args(int argc, const char** argv);
 
 
 //
