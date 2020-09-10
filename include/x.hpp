@@ -192,6 +192,31 @@ struct Transform {
     auto rad = std::acos(dot(from, to));
     return rotate(axis, rad);
   }
+  inline X Transform rotate_quat(float4 quat) const {
+    Transform m;
+
+    const float qw = quat.w;
+    const float qx = quat.x;
+    const float qy = quat.y;
+    const float qz = quat.z;
+
+    m.mat[0*4+0] = 1.0f - 2.0f*qy*qy - 2.0f*qz*qz;
+    m.mat[0*4+1] = 2.0f*qx*qy - 2.0f*qz*qw;
+    m.mat[0*4+2] = 2.0f*qx*qz + 2.0f*qy*qw;
+    m.mat[0*4+3] = 0.0f;
+
+    m.mat[1*4+0] = 2.0f*qx*qy + 2.0f*qz*qw;
+    m.mat[1*4+1] = 1.0f - 2.0f*qx*qx - 2.0f*qz*qz;
+    m.mat[1*4+2] = 2.0f*qy*qz - 2.0f*qx*qw;
+    m.mat[1*4+3] = 0.0f;
+
+    m.mat[2*4+0] = 2.0f*qx*qz - 2.0f*qy*qw;
+    m.mat[2*4+1] = 2.0f*qy*qz + 2.0f*qx*qw;
+    m.mat[2*4+2] = 1.0f - 2.0f*qx*qx - 2.0f*qy*qy;
+    m.mat[2*4+3] = 0.0f;
+
+    return m * *this;
+  }
   inline X Transform inverse() const {
     float det {
       r1.x * (r2.y * r3.z - r2.z * r3.y) -
