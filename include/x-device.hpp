@@ -123,32 +123,25 @@ Ray perspect_ray(
 
 
 
-#define TRAVERSE(trav, life, ray_flags)                                        \
-{                                                                              \
-  uint32_t wLife[] = PTR2WORDS(&life);                                         \
-  optixTrace(trav, life.ray.o, life.ray.v,                                     \
-    1e-5f, 1e20f, 0.0f, OptixVisibilityMask(255),                              \
-    ray_flags,                                                                 \
-    0, 1, 0, wLife[0], wLife[1]);                                              \
-}
-#define TRAVERSE_EX(trav, life, tmin, tmax, ray_flags)                         \
+#define TRAVERSE_GROUP_EX(trav, igrp, ngrp, life, tmin, tmax, ray_flags)       \
 {                                                                              \
   uint32_t wLife[] = PTR2WORDS(&life);                                         \
   optixTrace(trav, life.ray.o, life.ray.v,                                     \
     tmin, tmax, 0.0f, OptixVisibilityMask(255),                                \
     ray_flags,                                                                 \
-    0, 1, 0, wLife[0], wLife[1]);                                              \
+    igrp, ngrp, igrp, wLife[0], wLife[1]);                                        \
 }
+#define TRAVERSE_GROUP(trav, igrp, ngrp, life, ray_flags)                      \
+  TRAVERSE_GROUP_EX(trav, igrp, ngrp, life, 1e-5, 1e20, ray_flags)
+#define TRAVERSE_EX(trav, life, tmin, tmax, ray_flags)                         \
+  TRAVERSE_GROUP_EX(trav, 0, 1, life, tmin, tmax, ray_flags)
+#define TRAVERSE(trav, life, ray_flags)                                        \
+  TRAVERSE_GROUP(trav, 0, 1, life, ray_flags)
+
 #define INTERPOLATE(buf, prim, bary)                                           \
   buf[prim.y] * bary.x +                                                       \
   buf[prim.z] * bary.y +                                                       \
   buf[prim.x] * (1 - (bary.x + bary.y))
-
-
-
-
-
-
 
 
 } // namespace liong
