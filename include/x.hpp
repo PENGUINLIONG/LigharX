@@ -43,8 +43,10 @@ struct Ray {
 struct Light {
   float3 o;
   float3 v;
-  float3 rad;
   float3 emit;
+  // Cosined radian cutoff in [0,1]. 1 means that lights from all direction are
+  // accepted.
+  float cutoff_rad;
 };
 
 constexpr float4 make_pt(float x, float y, float z) {
